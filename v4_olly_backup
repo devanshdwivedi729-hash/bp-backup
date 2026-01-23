@@ -1,0 +1,1657 @@
+// index.js
+import React, { useEffect, useState } from "react";
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  Box,
+  IconButton,
+  Slide,
+  Tooltip,
+} from "@mui/material";
+import { useNavigate } from "react-router-dom";
+import Button from "../../components/genericComponents/Button";
+import GenerateURL from "../../util/APIUrlProvider";
+import InvokeApi from "../../util/apiInvoker";
+import properties from "../../properties/properties";
+import OllyAccordion from "./components/OllyAccordion";
+
+import GenericSkeleton from "../../components/genericComponents/Skeletons/GenericSkeleton";
+import AlertStrip from "../../components/AlertStrips";
+import { showErrorHandlerUpdated } from "../../util/util";
+import sampleData from "./components/sampleData";
+import { useCustomSnackbar } from "../../contexts/SnackbarContext";
+
+const Transition = React.forwardRef(function Transition(props, ref) {
+  return <Slide direction="left" ref={ref} {...props} />;
+});
+
+const BpOllyDialog = ({ pipeline_id, pipeline_instance_id, data = [] }) => {
+  const navigate = useNavigate();
+  const { showSnackbar } = useCustomSnackbar();
+
+  const [state, setState] = useState({
+    show_loading_icon: false,
+    data_load_failure: false,
+    error_in_loading_data: null,
+    response_data: null,
+    analyze_loading: false,
+  });
+
+  const [showOllyDialog, setShowOllyDialog] = useState(false);
+
+  const handleToggle = () => {
+    setShowOllyDialog(true);
+    fetchRCA();
+  };
+
+  const onClose = () => {
+    setShowOllyDialog(false);
+  };
+
+  const stage_instance = data && data.length > 0 ? data : [];
+  const failed_stage_instance = stage_instance[stage_instance.length - 1];
+
+  const trigger_id =
+    failed_stage_instance?.trigger_id ||
+    failed_stage_instance?.id ||
+    failed_stage_instance?.instance_id;
+
+  useEffect(() => {
+    if (failed_stage_instance && failed_stage_instance.status == "FAILED") {
+      handleToggle();
+    }
+  }, [failed_stage_instance && failed_stage_instance.status == "FAILED"]);
+
+  /**
+   * Fetches RCA (Root Cause Analysis) data for the failed pipeline
+   */
+  function fetchRCA() {
+    var requestInfo = {
+      endPoint: GenerateURL(
+        {
+          pipeline_id: pipeline_id,
+          pipeline_instance_id: pipeline_instance_id,
+        },
+        properties.api.bp_olly,
+      ),
+      httpMethod: "GET",
+      httpHeaders: { "Content-Type": "application/json" },
+    };
+    InvokeApi(requestInfo, handleSuccessApiHit, handleFailedApiHit);
+    setState((new_state) => ({
+      ...new_state,
+      show_loading_icon: true,
+      data_load_failure: false,
+      error_in_loading_data: null,
+
+
+    }));
+  }
+
+  const handleSuccessApiHit = (response) => {
+    console.log(response, "RCA Response");
+    setState((new_state) => ({
+      ...new_state,
+      show_loading_icon: false,
+      data_load_failure: false,
+      error_in_loading_data: null,
+      response_data: response,
+    }));
+  };
+
+  const handleFailedApiHit = (error) => {
+    console.log(error, "RCA Error");
+    let error_msg = showErrorHandlerUpdated(error);
+
+    showSnackbar("error", "Failed to Load Analysis", error_msg);
+
+    setState((new_state) => ({
+      ...new_state,
+      show_loading_icon: false,
+      data_load_failure: true,
+      error_in_loading_data: error_msg,
+    }));
+  };
+
+  
+  function mockFunction(){
+
+    const prompt ="list all the avialable tools";
+    setTimeout(() => {
+       navigate(`/bp-olly?prompt=${encodeURIComponent(prompt)}&auto_send=true`);
+  
+    }, 500);
+  }
+  function handleAnalyzeFailure() {
+    try {
+      if (!trigger_id) {
+        const msg = "Trigger ID is not available. Cannot analyze failure.";
+
+        showSnackbar("error", "Analysis Failed", msg);
+
+        setState((prev) => ({
+          ...prev,
+          data_load_failure: true,
+          error_in_loading_data: msg,
+        }));
+        return;
+      }
+
+      setState((prev) => ({
+        ...prev,
+        analyze_loading: true,
+        data_load_failure: false,
+        error_in_loading_data: null,
+      }));
+
+      const requestInfo = {
+        endPoint: GenerateURL(
+          {
+            pipeline_id: pipeline_id,
+            trigger_id: trigger_id,
+          },
+          properties.api.analyse_failure,
+        ),
+        httpMethod: "GET",
+        httpHeaders: { "Content-Type": "application/json" },
+      };
+
+      InvokeApi(
+        requestInfo,
+        handleAnalyzeFailureSuccess,
+        handleAnalyzeFailureError,
+      );
+    } catch (err) {
+      console.error("JS Error:", err);
+
+      showSnackbar("error", "Analysis Failed", "Something went wrong.");
+
+      setState((prev) => ({
+        ...prev,
+        analyze_loading: false,
+      }));
+    }
+  }
+
+
+  function handleAnalyzeFailureSuccess(response) {
+    
+    console.log("Analyze Failure API Response:", response);
+
+    const prompt =
+      response?.prompt ||
+      response?.message ||
+      response?.analysis_prompt ||
+      JSON.stringify(response);
+
+    setState((prev) => ({
+      ...prev,
+      analyze_loading: false,
+    }));
+
+    showSnackbar("success", "Success", "Redirecting to Olly Chat...");
+
+    setShowOllyDialog(false);
+
+    navigate(`/bp-olly?prompt=${encodeURIComponent(prompt)}&auto_send=true`);
+  }
+
+  function handleAnalyzeFailureError(error) {
+    console.error("API Error:", error);
+
+    let error_msg = "Unable to fetch analysis data. Please try again.";
+
+    showSnackbar("error", "Analysis Failed", error_msg);
+
+    setState((prev) => ({
+      ...prev,
+      analyze_loading: false,
+      data_load_failure: true,
+      error_in_loading_data: error_msg,
+    }));
+  }
+
+
+  return (
+    <>
+      {failed_stage_instance && failed_stage_instance.status == "FAILED" && (
+        <Button
+          variant="olly"
+          style={{ padding: "8px 11px" }}
+          onClick={handleToggle}
+        ></Button>
+      )}
+
+      <Dialog
+        open={showOllyDialog}
+        onClose={onClose}
+        TransitionComponent={Transition}
+        keepMounted
+        hideBackdrop
+        PaperProps={{
+          sx: {
+            position: "fixed",
+            right: 0,
+            margin: 0,
+            maxWidth: "410px",
+            width: "100%",
+            height: "100%",
+            borderRadius: 0,
+            boxShadow: 6,
+            maxHeight: "100%",
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            bgcolor: "#905CC8",
+            color: "white",
+            position: "relative",
+            fontWeight: 600,
+            px: "16px",
+            py: "11px",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <img
+            src="/images/bp-olly/bp-olly-white.svg"
+            alt=".."
+            style={{ marginRight: "16px" }}
+          />
+          <span  
+            className="font-18 color-white font-weight-600"
+            style={{ lineHeight: "normal" }}
+          >
+            Olly AI Helper
+          </span>
+          <Tooltip title="Available only for v2 jobs." arrow>
+            <Box
+              className="d-flex align-center justify-center"
+              sx={{
+                padding: "4px 4px",
+                color: "#ffffff",
+                backgroundColor: "#0086ff",
+                borderRadius: "4px",
+                marginLeft: "6px",
+                cursor: "pointer",
+                "& span": {
+                  lineHeight: "100%",
+                },
+              }}
+            >
+              <span className="font-14 font-weight-600 text-transform-uppercase">
+                Beta
+              </span>
+              <span className="ri-information-line font-15 ml-4 font-weight-400"></span>
+            </Box>
+          </Tooltip>
+          <IconButton
+            aria-label="close"
+            onClick={onClose}
+            sx={{ position: "absolute", right: 12, top: 10 }}
+          >
+            <i className="ri-close-fill font-24" style={{ color: "#fff" }}></i>
+          </IconButton>
+        </DialogTitle>
+
+        <DialogContent className="" sx={{ padding: "20px !important" }}>
+          {state?.show_loading_icon ? (
+            <>
+              {Array.from({ length: 6 }).map((_, index) => {
+                return (
+                  <GenericSkeleton
+                    height={62}
+                    style={{ borderRadius: "8px" }}
+                    rootStyle={{ marginBottom: "8px" }}
+                    key={index}
+                  />
+                );
+              })}
+            </>
+          ) : state?.data_load_failure ? (
+            <AlertStrip
+              message={state?.error_in_loading_data}
+              variant={"error"}
+            />
+          ) : (
+            state?.response_data &&
+            Object.entries(state.response_data).map(
+              ([microservice, entries], idx) => (
+                <OllyAccordion
+                  key={idx}
+                  microservice={microservice}
+                  data={entries[0]}
+                />
+              ),
+            )
+          )}
+        </DialogContent>
+
+        <div style={{ padding: "0px 20px 20px" }}>
+          <Box textAlign="center" sx={{ bgcolor: "#fafafa", padding: "12px" }}>
+            {/* Analyze Failure Button - Redirects to BP-Olly Chat */}
+            <Button
+              variant="outline"
+              className=""
+              style={{ width: "100%" }}
+              startIcon={"ri-message-3-line font-20"}
+              onClick={handleAnalyzeFailure}
+              // onClick={mockFunction}
+              disabled={state?.analyze_loading || !trigger_id}
+            >
+              {state?.analyze_loading ? "Loading..." : "Analyse Failure"}
+            </Button>
+
+            <Tooltip title="This feature is coming soon">
+              <Button
+                variant="outline"
+                className=""
+                style={{
+                  width: "100%",
+                  cursor: "not-allowed",
+                  marginTop: "12px",
+                }}
+                startIcon={"ri-message-3-line font-20"}
+                disabled
+              >
+                CONTACT BUILDPIPER TEAM
+              </Button>
+            </Tooltip>
+          </Box>
+        </div>
+      </Dialog>
+    </>
+  );
+};
+
+export default BpOllyDialog;
+
+
+
+
+// input
+
+import { Box } from '@mui/material'
+import React, { useRef, useState,useEffect } from 'react'
+import { useSearchParams } from "react-router-dom";
+
+import { Input } from '../../../components/genericComponents/Input'
+import { getCommonFunctions } from '../../serviceRevamp/add/ci_flow/SourceDetails';
+
+const InputBubble = ({onSend, ...props}) => {
+    const [state, setState] = useState({
+        data: {},
+        error: {}
+    });
+    const commonFunction = getCommonFunctions(state, setState, {});
+    const inputRef = useRef(null);
+     const [searchParams] = useSearchParams();
+
+
+const autoPrompt = searchParams.get("prompt");
+const autoSend = searchParams.get("auto_send");
+    
+    useEffect(() => {
+      if (autoPrompt) {
+            try {
+              onSend(autoPrompt);
+            } catch (e) {
+              /* ignore */
+            }
+         
+    
+      }
+    }, [autoPrompt]);
+
+    const handleBoxClick = () => {
+        if (inputRef.current) {
+            inputRef.current.focus();
+        }
+    };
+
+     const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            send();
+        }
+    };      
+    const send = () => {
+        let text = state.data.chat_entry;
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        if (typeof onSend === 'function') {
+            // allow onSend to be async
+
+            try { onSend(trimmed); } catch (e) { /* ignore */ }
+        }
+        setState(prev => ({ ...prev, data: { ...prev.data, chat_entry: '' } }));
+    };
+
+
+    return (
+        <Box
+            className="d-flex align-center"
+            sx={{
+                backgroundColor: '#fff',
+                border: '1px solid #cacaca',
+                padding: '8px',
+                borderRadius: '50px',
+                '& .input-component': {
+                    marginBottom: '0px',
+                    '& input': {
+                        border: "none",
+                        outline: 'none',
+                        '&:focus': {
+                            border: "none !important",
+                            outline: 'none !important',
+                        }
+                    }
+                },
+                '& .btn-submit-olly': {
+                    backgroundColor: '#9747FF',
+                    height: '48px',
+                    width: '48px',
+                    padding: '12px',
+                    borderRadius: '24px',
+                    color: '#fff'
+                }
+            }}
+            onClick={handleBoxClick}>
+            <Input
+                name="chat_entry"
+                label=""
+                type="text"
+                placeholder="Ask queries related to BuildPiper"
+                data={state.data}
+                error={state.error}
+                inputRef={inputRef}
+                onKeyDown={handleKeyDown}
+                onChangeHandler={commonFunction.onChangeHandler}
+            />
+            <button className='btn btn-submit-olly' onClick={send}>
+                <i className='ri-arrow-up-line font-24'></i>
+            </button>
+        </Box>
+    )
+}
+
+export default InputBubble
+
+
+
+/// fullscreen
+
+
+import React, { useEffect, useRef, useState } from 'react';
+import { makeStyles } from '@mui/styles';
+import { Box, IconButton, Tooltip } from '@mui/material';
+import InputBubble from './components/InputBubble';
+import FirstTimeConvo from './components/FirstTimeConvo';
+import properties from '../../properties/properties';
+import GenerateURL, { GenerateEndpointURL } from '../../util/APIUrlProvider';
+import { showErrorHandlerUpdated } from '../../util/util';
+import InvokeApi, { PostData } from '../../util/apiInvoker';
+import ResponseRenderer from './components/ResponseRenderer';
+import ChatHistory from './components/ChatHistory';
+import ChatLoading from './components/ChatLoading';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { IsSuperUser } from '../../util/security';
+import SidePanelLoading from './components/SidePanelLoading';
+import ConversationLoader from './components/ConversationLoader';
+
+const useStyles = makeStyles({
+    root: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: '#FFFFFF',
+        display: 'flex',
+        overflow: 'hidden',
+        zIndex: 1300,
+        '& .drawer': {
+            width: '310px',
+            height: '100%',
+            borderRight: '1px solid #E0E0E0',
+            boxSizing: 'border-box',
+            overflowY: 'auto',
+            backgroundColor: '#fff',
+            padding: '0 8px'
+        },
+        '& .content': {
+            flexGrow: 1,
+            height: '100%',
+            overflowY: 'auto',
+            position: 'relative',
+            backgroundColor: '#F8F5FA'
+        },
+        '& .header': {
+            borderBottom: '1px solid #E0E0E0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '24px 16px',
+            boxSizing: 'border-box',
+        },
+        '& .header-article': {
+            backgroundColor: '#905CC8',
+            color: '#fff',
+            padding: '16px'
+        },
+        '& .body': {
+            // padding: '16px',
+            '& .olly-nav-item': {
+                padding: '12px',
+                borderRadius: '4px',
+                '&:hover': {
+                    cursor: 'pointer',
+                    backgroundColor: '#f4f4f4'
+                }
+            }
+        },
+        '& .footer': {
+            padding: '16px',
+            borderTop: '1px solid #E0E0E0',
+            textAlign: 'right',
+        },
+    },
+});
+
+
+const FullScreenModeOllyCopilot = ({ onClose, children }) => {
+    const classes = useStyles();
+
+    const [state, setState] = useState({
+        data: {},
+        error: {},
+        conversation_id: null,
+        conversation_api_url: null,
+        show_loading_icon: false,
+        conversations_loading: false,
+        conversations_error: false,
+        conversations: [],
+        newConversationId: null
+    });
+    const [messages, setMessages] = useState([]);
+    const [selectedConversation, setSelectedConversation] = useState(null);
+    const chatBodyRef = useRef(null);
+    const location = useLocation();
+    const navigate = useNavigate();
+     
+
+    // Load chat history on mount
+    useEffect(() => {
+        loadChatHistory();
+    }, []);
+
+    // Load conversation from URL on mount
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        // Extract conversation ID from URL path like /bp-olly/123abc
+        const pathParts = window.location.pathname.split('/');
+        const convIdFromUrl = pathParts[pathParts.length - 1];
+
+        // Check if we have a valid conversation ID in the URL (not just /bp-olly)
+        if (convIdFromUrl && convIdFromUrl !== 'bp-olly' && convIdFromUrl.length > 0) {
+            console.log('Loading conversation from URL:', convIdFromUrl);
+            // Load this conversation
+            fetchConversationHistory(convIdFromUrl);
+        }
+    }, []); // Empty dependency array = run only once on mount
+
+    // Handle query param message (existing code)
+   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const message = params.get('message');
+    if (!message) return;
+
+    // show incoming message and get reply
+    (async () => {
+        setMessages(prev => [...prev, 
+            { type: 'user', text: message }, 
+            { type: 'bot', text: '', isLoading: true, userQuery: message }  // ← Add userQuery
+        ]);
+        const reply = await validateAndSave(message);
+        setMessages(prev => {
+            const idx = prev.findIndex(m => m.type === 'bot' && m.isLoading);
+            if (idx === -1) return [...prev, { type: 'bot', text: reply }];
+            const copy = [...prev];
+            copy[idx] = { ...copy[idx], text: reply, isLoading: false };
+            return copy;
+        });
+    })();
+
+    // remove query param so it doesn't repost on refresh
+    const url = new URL(window.location.href);
+    url.searchParams.delete('message');
+    window.history.replaceState({}, document.title, url.toString());
+}, []);
+
+    // // Auto-scroll when messages change
+    // useEffect(() => {
+    //     if (chatBodyRef.current) {
+    //         chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+    //     }
+    // }, [messages]);
+
+// Auto-scroll when messages change - ONLY during loading
+useEffect(() => {
+    const scrollToBottom = () => {
+        if (chatBodyRef.current) {
+            // Check if there's a loading message
+            const hasLoadingMessage = messages.some(m => m.isLoading);
+            
+            // Only auto-scroll if we're in loading state
+            if (hasLoadingMessage) {
+                requestAnimationFrame(() => {
+                    if (chatBodyRef.current) {
+                        chatBodyRef.current.scrollTo({
+                            top: chatBodyRef.current.scrollHeight,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            }
+        }
+    };
+
+    scrollToBottom();
+    
+    // Also scroll after a short delay to catch any late-rendering elements
+    const timeoutId = setTimeout(scrollToBottom, 100);
+    
+    return () => clearTimeout(timeoutId);
+}, [messages]);
+
+
+    const loadChatHistory = () => {
+        var requestInfo = {
+            endPoint: GenerateURL({}, properties.api.bp_olly_agent.get_all_conversations),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+
+        InvokeApi(requestInfo, loadChatHistorrySuccess, loadChatHistoryFail);
+        setState(new_state => ({
+            ...new_state,
+            conversations_loading: true,
+            conversations_error: false
+        }));
+    }
+    const loadChatHistorrySuccess = (response) => {
+        console.log(response, "sdjfsajfsrespoonse");
+        try {
+            const convs = response?.conversations ?? response?.results?.conversations ?? response?.results ?? [];
+            console.log(convs, "loaded conversations:", convs);
+
+            setState(prev => ({
+                ...prev,
+                conversations: Array.isArray(convs) ? convs : [],
+                conversations_loading: false,
+                conversations_error: false
+            }));
+
+            // After state update, check if we need to update selectedConversation with full object
+            setState(prev => {
+                if (prev.newConversationId && Array.isArray(convs)) {
+                    const newConv = convs.find(c =>
+                        (c.conversation_id === prev.newConversationId) ||
+                        (c.id === prev.newConversationId)
+                    );
+
+                    if (newConv) {
+                        console.log("Found new conversation in list, updating selection:", newConv);
+                        // Update selectedConversation with the full object from the list
+                        setSelectedConversation(newConv);
+                    }
+                }
+                return prev;
+            });
+
+        } catch (e) {
+            console.error('Failed to parse conversations response', e);
+            setState(prev => ({ ...prev, conversations_loading: false, conversations_error: true }));
+        }
+    };
+
+
+
+    const loadChatHistoryFail = (error) => {
+        // eslint-disable-next-line no-console
+        console.error('loadChatHistoryFail', error);
+        setState(prev => ({ ...prev, conversations_loading: false, conversations_error: true }));
+    }
+    // Normalize single history item into { type, text }
+    // const normalizeHistoryItem = (item) => {
+    //     try {
+    //         if (item == null) return { type: 'bot', text: '' };
+    //         if (typeof item === 'string') return { type: 'bot', text: item };
+
+    //         // Check for message_type field specifically (your API format)
+    //         if (item.message_type) {
+    //             const messageType = item.message_type.toLowerCase();
+    //             const isUser = messageType === 'human' || messageType === 'user';
+    //             let text = item.content  //|| item.text || item.message || '';
+    //             console.log(text, "fdskjfjsajkfjas")
+    //             // For AI messages, try to parse and extract the actual response
+    //             if (!isUser && typeof text === 'string') {
+    //                 try {
+    //                     // First, try to parse as JSON (if it's properly formatted)
+    //                     let parsed;
+    //                     try {
+    //                         parsed = JSON.parse(text);
+    //                     } catch {
+    //                         // If JSON.parse fails, try converting Python dict string to JSON
+    //                         // Replace single quotes with double quotes for JSON compatibility
+    //                         const jsonCompatible = text
+    //                             .replace(/'/g, '"')
+    //                             .replace(/None/g, 'null')
+    //                             .replace(/True/g, 'true')
+    //                             .replace(/False/g, 'false');
+    //                         parsed = JSON.parse(jsonCompatible);
+    //                     }
+
+    //                     // Extract the response in priority order:
+    //                     // 1. execution_results (the actual response)
+    //                     // 2. final_response (fallback)
+    //                     // 3. response (another fallback)
+    //                     if (parsed && typeof parsed === 'object') {
+    //                         text = parsed.execution_results ||
+    //                             parsed.final_response ||
+    //                             parsed.response ||
+    //                             text;
+
+    //                         // Clean up markdown headers if needed (optional)
+    //                         if (typeof text === 'string') {
+    //                             // Remove leading "## " if present
+    //                             text = text.replace(/^##\s+/, '');
+    //                         }
+    //                     }
+    //                 } catch (parseErr) {
+    //                     // If parsing fails completely, use raw content
+    //                     console.warn('Could not parse AI response:', parseErr);
+    //                 }
+    //             }
+
+    //             return {
+    //                 type: isUser ? 'user' : 'bot',
+    //                 text: typeof text === 'string' ? text : JSON.stringify(text, null, 2)
+    //             };
+    //         }
+
+    //         // Fallback: text candidates
+    //         const text =
+    //             item.content ??
+    //             item.text ??
+    //             item.message ??
+    //             item.body ??
+    //             item.response ??
+    //             item.final_response ??
+    //             item.finalResponse ??
+    //             (typeof item === 'object' ? JSON.stringify(item, null, 2) : String(item));
+
+    //         // Fallback: determine sender/type from role/sender fields
+    //         const sender = (item.role ?? item.sender ?? item.from ?? item.source ?? '').toString().toLowerCase();
+    //         const isUser = sender === 'user' || sender === 'human' || sender === 'request' || sender === 'client';
+
+    //         return { type: isUser ? 'user' : 'bot', text };
+    //     } catch (e) {
+    //         console.error('normalizeHistoryItem error', e);
+    //         return { type: 'bot', text: String(item ?? '') };
+    //     }
+    // };
+   const normalizeHistoryItem = (item) => {
+    console.log("=== normalizeHistoryItem START ===");
+    try {
+        if (item == null) return { type: 'bot', text: '' };
+        if (typeof item === 'string') return { type: 'bot', text: item };
+
+        // Check for message_type field
+        if (item.message_type) {
+            const messageType = item.message_type.toLowerCase();
+            const isUser = messageType === 'human' || messageType === 'user';
+            let text = item.content;
+            
+            console.log(`Message type: ${messageType}, isUser: ${isUser}`);
+
+            // For HUMAN messages, return content directly
+            if (isUser) {
+                return {
+                    type: 'user',
+                    text: typeof text === 'string' ? text : JSON.stringify(text, null, 2)
+                };
+            }
+
+            // For AI messages, parse and extract
+            if (typeof text === 'string' && text.length > 0) {
+                try {
+                    let parsed;
+                    
+                    // Try parsing the Python dict string
+                    try {
+                        // Try direct JSON parse first
+                        parsed = JSON.parse(text);
+                        console.log("✓ Direct JSON parse succeeded");
+                    } catch {
+                        // Enhanced Python dict to JSON conversion
+                        // This handles apostrophes in text better
+                        console.log("✗ Direct JSON parse failed, trying Python dict conversion");
+                        
+                        let jsonCompatible = text;
+                        
+                        // Step 1: Temporarily protect escaped quotes
+                        jsonCompatible = jsonCompatible.replace(/\\'/g, '___ESCAPED_SINGLE_QUOTE___');
+                        jsonCompatible = jsonCompatible.replace(/\\"/g, '___ESCAPED_DOUBLE_QUOTE___');
+                        
+                        // Step 2: Replace Python dict syntax
+                        // Only replace ' that are used as dict delimiters, not apostrophes in text
+                        // We do this by replacing ': ' and ', ' patterns first
+                        jsonCompatible = jsonCompatible.replace(/': /g, '": ');  // After keys
+                        jsonCompatible = jsonCompatible.replace(/', '/g, '", "'); // Between key-value pairs
+                        jsonCompatible = jsonCompatible.replace(/\{'/g, '{"');   // After opening brace
+                        jsonCompatible = jsonCompatible.replace(/', \{/g, '", {'); // Before nested object
+                        jsonCompatible = jsonCompatible.replace(/'\}/g, '"}');   // Before closing brace
+                        jsonCompatible = jsonCompatible.replace(/\['/g, '["');   // After opening bracket
+                        jsonCompatible = jsonCompatible.replace(/'\]/g, '"]');   // Before closing bracket
+                        
+                        // Step 3: Replace Python boolean/null values
+                        jsonCompatible = jsonCompatible.replace(/None/g, 'null');
+                        jsonCompatible = jsonCompatible.replace(/True/g, 'true');
+                        jsonCompatible = jsonCompatible.replace(/False/g, 'false');
+                        
+                        // Step 4: Restore escaped quotes
+                        jsonCompatible = jsonCompatible.replace(/___ESCAPED_SINGLE_QUOTE___/g, "'");
+                        jsonCompatible = jsonCompatible.replace(/___ESCAPED_DOUBLE_QUOTE___/g, '\\"');
+                        
+                        try {
+                            parsed = JSON.parse(jsonCompatible);
+                            console.log("✓ Python dict conversion succeeded");
+                        } catch (pythonError) {
+                            console.error("✗ Enhanced conversion also failed:", pythonError.message);
+                            throw pythonError;
+                        }
+                    }
+
+                    // Extract response with multiple fallbacks
+                    if (parsed && typeof parsed === 'object') {
+                        console.log("Parsed object keys:", Object.keys(parsed));
+                        
+                        let extractedText = null;
+                        
+                        // Priority 1: execution_results
+                        if (parsed.execution_results && typeof parsed.execution_results === 'string') {
+                            extractedText = parsed.execution_results;
+                            console.log("✓ Using execution_results");
+                        }
+                        // Priority 2: final_response (skip generic responses)
+                        else if (parsed.final_response && typeof parsed.final_response === 'string') {
+                            if (!parsed.final_response.includes("Okay, I understand") && 
+                                !parsed.final_response.includes("I am ready to finalize")) {
+                                extractedText = parsed.final_response;
+                                console.log("✓ Using final_response");
+                            } else if (parsed.execution_results) {
+                                extractedText = parsed.execution_results;
+                                console.log("✓ Using execution_results (final_response was generic)");
+                            } else {
+                                extractedText = parsed.final_response;
+                                console.log("⚠ Using generic final_response");
+                            }
+                        }
+                        // Priority 3: response field
+                        else if (parsed.response && typeof parsed.response === 'string') {
+                            extractedText = parsed.response;
+                            console.log("✓ Using response");
+                        }
+                        // Last resort
+                        else {
+                            extractedText = text;
+                            console.log("⚠ No suitable field found");
+                        }
+
+                        // Clean up the extracted text
+                        if (typeof extractedText === 'string') {
+                            // Unescape characters
+                            extractedText = extractedText
+                                .replace(/\\n/g, '\n')
+                                .replace(/\\t/g, '\t')
+                                .replace(/\\"/g, '"')
+                                .replace(/\\'/g, "'");
+                            
+                            // Remove leading markdown headers
+                            extractedText = extractedText.replace(/^##\s+/, '');
+                            
+                            text = extractedText;
+                            console.log("✓ Final text (first 100 chars):", text.substring(0, 100));
+                        }
+                    }
+
+                } catch (parseErr) {
+                    console.error("=== PARSE ERROR ===");
+                    console.error("Error:", parseErr.message);
+                    console.error("Text sample:", text.substring(0, 300));
+                    
+                    // Manual regex extraction as last resort
+                    // Try to extract execution_results or final_response
+                    const execMatch = text.match(/'execution_results':\s*['"]([\s\S]*?)['"]\s*,\s*'final_response'/);
+                    const finalMatch = text.match(/'final_response':\s*['"]([\s\S]*?)['"]\s*,\s*'status'/);
+                    
+                    if (execMatch && execMatch[1]) {
+                        text = execMatch[1]
+                            .replace(/\\n/g, '\n')
+                            .replace(/\\t/g, '\t')
+                            .replace(/\\"/g, '"')
+                            .replace(/\\'/g, "'");
+                        console.log("✓ Extracted via regex (execution_results)");
+                    } else if (finalMatch && finalMatch[1]) {
+                        text = finalMatch[1]
+                            .replace(/\\n/g, '\n')
+                            .replace(/\\t/g, '\t')
+                            .replace(/\\"/g, '"')
+                            .replace(/\\'/g, "'");
+                        console.log("✓ Extracted via regex (final_response)");
+                    } else {
+                        console.error("✗ All extraction methods failed");
+                        text = 'Unable to parse response. Please check the console for details.';
+                    }
+                }
+            }
+
+            return {
+                type: 'bot',
+                text: typeof text === 'string' ? text : JSON.stringify(text, null, 2)
+            };
+        }
+
+        // Fallback for other message formats
+        const text =
+            item.content ??
+            item.text ??
+            item.message ??
+            item.body ??
+            (typeof item === 'object' ? JSON.stringify(item, null, 2) : String(item));
+
+        const sender = (item.role ?? item.sender ?? '').toString().toLowerCase();
+        const isUser = sender === 'user' || sender === 'human';
+
+        return { type: isUser ? 'user' : 'bot', text };
+    } catch (e) {
+        console.error('normalizeHistoryItem outer error:', e);
+        return { type: 'bot', text: 'Error processing message' };
+    }
+};
+
+
+
+
+
+    const loadConversationSuccess = (response, conversationId) => {
+        try {
+            const payload = response?.data ?? response;
+            console.log(response, conversationId, "fdjksajfksajfksajf");
+
+            // common shapes for history - ADD 'conversations' to the list!
+            let items =
+                payload?.conversations ??        // ← ADD THIS FIRST!
+                payload?.messages ??
+                payload?.conversation ??
+                payload?.history ??
+                payload?.conversation_history ??
+                payload?.data?.messages ??
+                payload?.data?.conversations ??  // ← Also check nested
+                payload;
+
+            // If single object with fields, try to extract array fields
+            if (items && !Array.isArray(items) && typeof items === 'object') {
+                // sometimes conversation is object with exchanges array
+                items = items.conversations ?? items.exchanges ?? items.messages ?? Object.values(items);
+            }
+
+            const list = Array.isArray(items) ? items : [];
+            console.log("Extracted list:", list);
+
+            // Map into UI messages (user/bot)
+            const mapped = list.map(i => normalizeHistoryItem(i));
+            console.log("Mapped messages:", mapped);
+
+            // update messages and conversation state
+            setMessages(mapped.length ? mapped : []);
+            setState(prev => ({
+                ...prev,
+                conversation_id: conversationId,
+                conversation_api_url: GenerateURL({ conversation_id: conversationId }, properties.api.bp_olly_agent.continue_convo),
+                show_loading_icon: false,
+                data_load_failure: false
+            }));
+
+            // update browser path without reload
+            try {
+                if (conversationId && typeof window !== 'undefined') {
+                    const urlObj = new URL(window.location.href);
+                    urlObj.pathname = `/bp-olly/${conversationId}`;
+                    urlObj.searchParams.delete('message');
+                    window.history.replaceState({}, document.title, urlObj.toString());
+                }
+            } catch (uErr) { /* ignore */ }
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.error('loadConversationSuccess parse error', e);
+            setState(prev => ({ ...prev, show_loading_icon: false, data_load_failure: true }));
+        }
+    };
+
+
+    const loadConversationFail = (err) => {
+        // eslint-disable-next-line no-console
+        console.error('loadConversationFail', err);
+        setState(prev => ({ ...prev, show_loading_icon: false, data_load_failure: true }));
+        // keep existing messages, optionally append error bot message
+        setMessages(prev => [...prev, { type: 'bot', text: (err && (err.error || err.message)) ? (err.error || err.message) : 'Failed to load conversation' }]);
+    };
+
+    const fetchConversationHistory = (conversation) => {
+        // conversation can be an item object or an id string
+        const conversationId = conversation?.conversation_id ?? conversation?.id ?? conversation;
+        if (!conversationId) return;
+
+        // set selected conversation for UI highlight
+        setSelectedConversation(typeof conversation === 'object' ? conversation : { conversation_id: conversationId });
+
+        // show loading placeholder in messages
+        setMessages([{ type: 'bot', text: '', isLoading: true, isConversationLoading: true  }]);
+        setState(prev => ({ ...prev, show_loading_icon: true, data_load_failure: false }));
+
+        const requestInfo = {
+            endPoint: GenerateURL({ conversation_id: conversationId }, properties.api.bp_olly_agent.get_conversation_history),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        };
+
+        InvokeApi(
+            requestInfo,
+            (res) => loadConversationSuccess(res, conversationId),
+            (err) => loadConversationFail(err)
+        );
+    };
+
+    const handleConversationClick = (conv) => {
+        // conv may be id or object
+        const id = conv?.conversation_id ?? conv?.id ?? conv;
+        if (!id) return;
+        fetchConversationHistory(id);
+    };
+
+
+
+
+  function validateAndSave(text) {
+    return new Promise((resolve) => {
+        const post_data = { message: text };
+
+        // show loading spinner for this conversation call
+        setState(prev => ({ ...prev, show_loading_icon: true }));
+
+        // Helper to extract error message from various response formats
+        const getErrorMessage = (err) => {
+            // Check for different error response formats
+            if (err && typeof err === 'object') {
+                // Format 1: { response: "error message" }
+                if (err.response && typeof err.response === 'string') {
+                    return err.response;
+                }
+                // Format 2: { response: { response: "error message" } }
+                if (err.response && err.response.response && typeof err.response.response === 'string') {
+                    return err.response.response;
+                }
+                // Format 3: { error: "error message" }
+                if (err.error && typeof err.error === 'string') {
+                    return err.error;
+                }
+                // Format 4: { message: "error message" }
+                if (err.message && typeof err.message === 'string') {
+                    return err.message;
+                }
+                // Format 5: { data: { response: "error message" } }
+                if (err.data && err.data.response && typeof err.data.response === 'string') {
+                    return err.data.response;
+                }
+            }
+            // If it's a string, return it directly
+            if (typeof err === 'string') {
+                return err;
+            }
+            // Default fallback
+            return 'Server is currently unavailable. Please try again later.';
+        };
+
+        // Helper to normalize payload -> string
+        const normalizePayloadToString = (res) => {
+            try {
+                const payload = res?.response?.final_response;
+                if (payload == null) return 'No response';
+                if (typeof payload === 'string') return payload;
+                if (typeof payload !== 'object') return String(payload);
+                const maybe = payload.reply ?? payload.message ?? payload.text;
+                if (maybe != null) return typeof maybe === 'string' ? maybe : JSON.stringify(maybe, null, 2);
+                if (Array.isArray(payload.candidates) && payload.candidates.length) {
+                    const parts = [];
+                    for (const c of payload.candidates) {
+                        if (Array.isArray(c.content)) {
+                            for (const p of c.content) {
+                                if (typeof p === 'string') parts.push(p);
+                                else if (p && typeof p.text === 'string') parts.push(p.text);
+                                else parts.push(JSON.stringify(p));
+                            }
+                        } else if (typeof c === 'string') parts.push(c);
+                        else parts.push(JSON.stringify(c));
+                    }
+                    const joined = parts.join('\n\n').trim();
+                    if (joined) return joined;
+                }
+                if (Array.isArray(payload.outputs) && payload.outputs.length) {
+                    return payload.outputs.map(o => (o.content ?? o.text ?? JSON.stringify(o))).join('\n\n');
+                }
+                return JSON.stringify(payload, null, 2);
+            } catch (e) {
+                console.error('normalize error', e);
+                return 'No response';
+            }
+        };
+
+        // Build URL for continue endpoint (if conversation exists) or start endpoint
+        const callContinue = (conversationId, message, done) => {
+            const continueUrl = GenerateURL({ conversation_id: conversationId }, properties.api.bp_olly_agent.continue_convo);
+            PostData(
+                continueUrl,
+                { message },
+                (resContinue) => {
+                    console.log(resContinue, "fkjdfsjkakfsajdfjsa")
+                    try { saveSuccess(resContinue); } catch (_) { /* ignore */ }
+                    // hide loading now that we have a response
+                    setState(prev => ({ ...prev, show_loading_icon: false }));
+
+                    const reply = normalizePayloadToString(resContinue);
+                    return done(reply);
+                },
+                (errContinue) => {
+                    console.error("Continue conversation error:", errContinue);
+                    setState(prev => ({ ...prev, show_loading_icon: false }));
+                    try { saveFail(errContinue); } catch (_) { /* ignore */ }
+                    
+                    // Use the new error message extractor
+                    const msg = getErrorMessage(errContinue);
+                    return done(msg);
+                },
+                true,
+                true
+            );
+        };
+
+        // If conversation already exists, post directly to continue_convo
+        if (state?.conversation_id) {
+            callContinue(state.conversation_id, text, (reply) => resolve(reply));
+            return;
+        }
+
+        // No conversation yet: call start_convo to create conversation_id
+        const startUrl = GenerateURL({}, properties.api.bp_olly_agent.start_convo);
+        PostData(
+            startUrl,
+            post_data,
+            (resStart) => {
+                try { saveSuccess(resStart); } catch (_) { /* ignore */ }
+
+                const payloadStart = resStart?.data ?? resStart;
+                const convId = payloadStart?.conversation_id ?? payloadStart?.conversation?.id ?? payloadStart?.id;
+
+                if (convId) {
+                    // update component state conversation_id and continue endpoint url
+                    try {
+                        const convoApiUrl = GenerateURL({ conversation_id: convId }, properties.api.bp_olly_agent.continue_convo);
+                        setState(prev => ({
+                            ...prev,
+                            conversation_id: convId,
+                            conversation_api_url: convoApiUrl,
+                            newConversationId: convId
+                        }));
+
+                        // Set selected conversation for highlighting
+                        setSelectedConversation({ conversation_id: convId });
+
+                    } catch (sErr) {
+                        console.error('Failed to set conversation state', sErr);
+                    }
+
+                    // update browser path to /bp-olly/<id> without reload
+                    try {
+                        if (typeof window !== 'undefined') {
+                            const clientPath = `/bp-olly/${convId}`;
+                            const urlObj = new URL(window.location.href);
+                            urlObj.pathname = clientPath;
+                            urlObj.searchParams.delete('message');
+                            window.history.replaceState({}, document.title, urlObj.toString());
+                        }
+                    } catch (urlErr) {
+                        console.error('Failed to update conversation URL', urlErr);
+                    }
+
+                  
+                    // Now post the original message to continue_convo and resolve with that reply
+                    callContinue(convId, text, (reply) => resolve(reply));
+                } else {
+                    // hide loading if no conv id returned and we are resolving fallback
+                    setState(prev => ({ ...prev, show_loading_icon: false }));
+                    // If no convId returned, normalize and resolve with start response (fallback)
+                    const fallback = normalizePayloadToString(resStart);
+                    return resolve(fallback);
+                }
+            },
+            (errStart) => {
+                console.error("Start conversation error:", errStart);
+                setState(prev => ({ ...prev, show_loading_icon: false }));
+                try { saveFail(errStart); } catch (_) { /* ignore */ }
+                
+                // Use the new error message extractor
+                const msg = getErrorMessage(errStart);
+                return resolve(msg);
+            },
+            true,
+            true
+        );
+
+    });
+}
+
+
+    function saveSuccess(response) {
+
+        setState(new_state => ({
+            ...new_state,
+            show_loading_icon: false,
+            canRedirect: true,
+            data_load_failure: false
+        }));
+
+
+    }
+
+    function saveFail(response) {
+
+        let error_msg = showErrorHandlerUpdated(response)
+        if (response?.edit_possible === false) {
+            setState((prevState) => ({
+                ...prevState,
+                show_loading_icon: false,
+                //data_load_failure: true,
+                edit_error: { ...response }
+            }))
+        } else {
+
+            setState(new_state => ({
+                ...new_state,
+                show_loading_icon: false,
+                data_load_failure: true,
+                error_msg: "Unable to save due to following reasons: " + error_msg
+            }));
+        }
+
+
+
+
+    }
+
+const handleSend = async (text) => {
+    if (!text || !text.trim()) return;
+
+    // ✅ Check if URL contains a conversation ID (simple and reliable)
+    const isNewConversation = window.location.pathname === '/bp-olly';
+
+    // Append user message and a bot placeholder with isLoading flag AND userQuery
+    setMessages(prev => {
+        return [...prev, 
+            { type: 'user', text }, 
+            { type: 'bot', text: '', isLoading: true, userQuery: text }
+        ];
+    });
+
+    // Call API and update the first pending bot placeholder with the reply when ready
+    try {
+        const reply = await validateAndSave(text);
+        console.log(reply, "fjdksajfsakjdfjsa")
+        setMessages(prev => {
+            const idx = prev.findIndex(m => m.type === 'bot' && m.isLoading);
+            if (idx === -1) {
+                return [...prev, { type: 'bot', text: reply }];
+            }
+            const copy = [...prev];
+            copy[idx] = { ...copy[idx], text: reply, isLoading: false };
+            return copy;
+        });
+        
+        // ✅ Only refresh chat history if URL is /bp-olly (new conversation)
+        if (isNewConversation) {
+            try {
+                setTimeout(() => {
+                    console.log('Refreshing chat history for new conversation');
+                    loadChatHistory();
+                }, 500);
+            } catch (refreshErr) {
+                console.error('Failed to refresh conversation list', refreshErr);
+            }
+        }
+        
+        // Scroll to show the user's query at the top
+        setTimeout(() => {
+            if (chatBodyRef.current) {
+                const userMessages = chatBodyRef.current.querySelectorAll('.user-message');
+                if (userMessages.length > 0) {
+                    const lastUserMessage = userMessages[userMessages.length - 1];
+                    lastUserMessage.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'start'
+                    });
+                }
+            }
+        }, 200);
+        
+    } catch (err) {
+        const fallback = (err && err.message) ? err.message : 'Failed to get a response';
+        setMessages(prev => {
+            const idx = prev.findIndex(m => m.type === 'bot' && m.isLoading);
+            if (idx === -1) return [...prev, { type: 'bot', text: fallback }];
+            const copy = [...prev];
+            copy[idx] = { ...copy[idx], text: fallback, isLoading: false };
+            return copy;
+        });
+    }
+};
+
+
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const message = params.get('message');
+    if (!message) return;
+
+    // ✅ Check URL pathname to determine if it's a new conversation
+    const isNewConversation = window.location.pathname === '/bp-olly';
+
+    // show incoming message and get reply
+    (async () => {
+        setMessages(prev => [...prev, 
+            { type: 'user', text: message }, 
+            { type: 'bot', text: '', isLoading: true, userQuery: message }
+        ]);
+        const reply = await validateAndSave(message);
+        setMessages(prev => {
+            const idx = prev.findIndex(m => m.type === 'bot' && m.isLoading);
+            if (idx === -1) return [...prev, { type: 'bot', text: reply }];
+            const copy = [...prev];
+            copy[idx] = { ...copy[idx], text: reply, isLoading: false };
+            return copy;
+        });
+        
+        // ✅ Only refresh if URL is /bp-olly (new conversation)
+        if (isNewConversation) {
+            try {
+                setTimeout(() => {
+                    console.log('Refreshing chat history for new conversation from query param');
+                    loadChatHistory();
+                }, 500);
+            } catch (refreshErr) {
+                console.error('Failed to refresh conversation list', refreshErr);
+            }
+        }
+    })();
+
+    // remove query param so it doesn't repost on refresh
+    const url = new URL(window.location.href);
+    url.searchParams.delete('message');
+    window.history.replaceState({}, document.title, url.toString());
+}, [])
+    // .get_conversation_history
+    // GenerateURL({conversation_id: state.conversation_id}, properties.api.bp_olly_agent.get_conversation_history);
+    const handleNewChat = () => {
+        // Clear messages to show FirstTimeConvo screen
+        setMessages([]);
+
+        // Reset conversation state
+        setState(prev => ({
+            ...prev,
+            conversation_id: null,
+            conversation_api_url: null
+        }));
+
+        // Clear selected conversation highlight
+        setSelectedConversation(null);
+
+        // Update URL to base /bp-olly route
+        if (typeof window !== 'undefined') {
+            const urlObj = new URL(window.location.href);
+            urlObj.pathname = '/bp-olly';
+            urlObj.searchParams.delete('message');
+            window.history.pushState({}, document.title, urlObj.toString());
+        }
+    };
+
+    const handleDeleteConversation = (conversation) => {
+    const conversationId =
+        conversation?.conversation_id ?? conversation?.id;
+
+    if (!conversationId) return;
+
+    const requestInfo = {
+        endPoint: GenerateURL(
+            { conversation_id: conversationId },
+            properties.api.bp_olly_agent.get_conversation_history
+        ),
+        httpMethod: "DELETE",
+        httpHeaders: { "Content-Type": "application/json" }
+    };
+
+    InvokeApi(
+        requestInfo,
+        () => {
+            // Remove from local list
+            setState(prev => ({
+                ...prev,
+                conversations: prev.conversations.filter(
+                    c =>
+                        (c.conversation_id ?? c.id) !== conversationId
+                )
+            }));
+
+            // If deleted conversation was selected
+            const selectedId =
+                selectedConversation?.conversation_id ??
+                selectedConversation?.id;
+
+            if (selectedId === conversationId) {
+                setSelectedConversation(null);
+                setMessages([]);
+
+                // Reset URL to base
+                if (typeof window !== 'undefined') {
+                    const urlObj = new URL(window.location.href);
+                    urlObj.pathname = '/bp-olly';
+                    urlObj.searchParams.delete('message');
+                    window.history.pushState({}, document.title, urlObj.toString());
+                }
+
+                // Reset conversation state
+                setState(prev => ({
+                    ...prev,
+                    conversation_id: null,
+                    conversation_api_url: null
+                }));
+            }
+        },
+        (error) => {
+            console.error('Delete conversation failed', error);
+        }
+    );
+};
+
+
+    return (
+        <div className={classes.root}>
+            <div className="drawer">
+                <div className="header" >
+                    <Link
+                        to={IsSuperUser() ? '/clusterDashboard' : "/ApplicationDashboard"}
+                        className='d-flex align-center space-between'
+                        style={{
+                            width: '100%'
+                        }}
+                    >
+                        <img src="/images/bp-olly/bp-olly-1.svg" style={{ height: '20px' }} alt="bp-olly" />
+                        <i
+                            className="ri-arrow-left-s-line font-18 cursor-pointer"
+                            onClick={onClose}
+                        ></i>
+                    </Link>
+
+                </div>
+                <div className="body" style={{ borderBottom: '1px solid #E0E0E0' }}>
+                    <div
+                        className="font-14 font-weight-500 d-flex align-center olly-nav-item"
+                        style={{ gap: '5px', padding: '6px 12px' }}
+                        onClick={handleNewChat}  // ← ADD THIS
+                    >
+                        <i className='ri-chat-1-line font-24 color-secondary'></i>
+                        <span className='color-primary'>New Chat</span>
+                    </div>
+                    {/* <div className="font-14 font-weight-500 d-flex align-center olly-nav-item" style={{ gap: '5px', padding: '6px 12px' }}>
+                        <i className='ri-search-2-line font-24 color-secondary'></i>
+                        <span className='color-primary'>Search</span>
+                    </div> */}
+                </div>
+
+                <div className="body" style={{ borderBottom: '1px solid #E0E0E0' }}>
+                    <p className='font-12 font-weight-600 color-tertiary mb-12 mt-12 '>Chats</p>
+                    {
+                        state.conversations_loading ?
+                            <SidePanelLoading />
+                            :
+                            state.conversations_error ?
+                                <div className='d-flex justify-center align-center' style={{ height: '100px' }}>
+                                    <p className='font-14 color-error font-weight-500'>Failed to load conversations</p>
+                                </div>
+                                :
+                                <ChatHistory
+                                    conversations={state.conversations && state.conversations.length ? state.conversations : []}
+                                    loadConverstation={fetchConversationHistory}
+                                    onDeleteConversation={handleDeleteConversation} 
+                                    selectedConversation={selectedConversation}
+                                    newConversationId={state.newConversationId}
+                                />
+                    }
+
+                </div>
+            </div>
+
+            <Box className="content" sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                width: '100%'
+            }}>
+                <div className="header header-article">
+                    <div className="font-14 font-weight-600 d-flex align-center olly-nav" style={{ gap: '8px' }}>
+                        <img src="/images/bp-olly/bp-olly-white.svg" style={{ height: '24px' }} alt="bp-olly" />
+                        <span className='color-white'>Ask Olly</span>
+                    </div>
+                    {/* <div>
+                        <IconButton sx={{ color: '#fff' }}>
+                            <i className="ri-fullscreen-exit-fill font-24 cursor-pointer mr-2"></i>
+                        </IconButton>
+                        <IconButton sx={{ color: '#fff' }}>
+                            <i className="ri-close-line font-24 cursor-pointer"></i>
+                        </IconButton>
+                    </div> */}
+                </div>
+                <Box
+                    className="body"
+                    sx={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 0 }}
+                    
+                >
+                    <Box className='chat-interface-ui' 
+                    ref={chatBodyRef}
+                    style={{
+                        flex: 1,
+                        overflowY: 'auto',
+                        padding: 16 
+                    }}
+
+                        sx={{
+                            // Custom scrollbar styles
+                            '&::-webkit-scrollbar': {
+                                width: '6px',
+                            },
+                            '&::-webkit-scrollbar-track': {
+                                background: 'transparent', // Invisible track
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                                background: '#d3d3d3', // Light gray thumb
+                                borderRadius: '3px',
+                                opacity: 0,
+                                transition: 'opacity 0.3s ease'
+                            },
+                            '&:hover::-webkit-scrollbar-thumb': {
+                                opacity: 1, // Show on hover
+                                background: '#d3d3d3'
+                            },
+                            '&::-webkit-scrollbar-thumb:hover': {
+                                background: '#b0b0b0' // Slightly darker on thumb hover
+                            },
+                            // Firefox scrollbar
+                            scrollbarWidth: 'thin',
+                            scrollbarColor: 'transparent transparent',
+                            '&:hover': {
+                                scrollbarColor: '#d3d3d3 transparent'
+                            }
+                        }}
+                    >
+                      
+                        {messages.length === 0 && (
+                            <FirstTimeConvo />
+                        )}
+
+                        {messages.map((m, i) => (
+                            <div 
+                            key={i} 
+                            className={m.type === 'bot' ? 'bot-message' : 'user-message'}
+                            style={{ display: 'flex', justifyContent: m.type === 'user' ? 'flex-end' : 'flex-start', marginBottom: 10 }}>
+                                <div style={{
+                                    background: m.type === 'user' ? '#e0f7fa' : '#fff',
+                                    color: m.type === 'user' ? '#222' : '#333',
+                                    borderRadius: 8,
+                                    padding: '8px 12px',
+                                    maxWidth: '75%',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                                    scrollMarginTop: '80px' 
+                                }}>
+                                    <ResponseRenderer content={m.text} isLoading={!!m.isLoading && !m.isConversationLoading} isConversationLoading={!!m.isConversationLoading} userQuery={m.userQuery || ''} />
+                                </div>
+                            </div>
+                        ))}
+                    </Box>
+                </Box>
+                <div className="footer">
+                    <InputBubble onSend={handleSend} />
+                </div>
+            </Box>
+        </div>
+    );
+};
+
+export default FullScreenModeOllyCopilot;
+
+
+
+analyse_failure:"api/v1/pipeline/${pipeline_id}/trigger/${trigger_id}/analyse_failure/",
