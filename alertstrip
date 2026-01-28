@@ -1,0 +1,15 @@
+import React from 'react'
+import Chip from '../components/chip/Chip'
+
+const LicenseAlertStrip = () => {
+  return (
+    <div className='d-flex align-center' style={{backgroundColor:"#407BCA",color:"#FFFFFF",padding:"10px",gap:"8px"}}>
+      <span className='ri-information-fill font-20' style={{color:"#FFFFFF"}}></span>
+          <span>Your Professional License is valid till 02-Sep-2023, Please Renew your plan</span>
+          <Chip label="Renew" variant='secondary' size='large' onClick={()=>{}} />
+          <span className="ri-close-line font-15"></span>
+    </div>
+  )
+}
+
+export default LicenseAlertStrip
