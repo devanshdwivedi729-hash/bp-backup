@@ -1,452 +1,344 @@
-import Popover from '@mui/material/Popover';
-import Tooltip from '@mui/material/Tooltip';
-import { makeStyles } from '@mui/styles';
-import React, { useEffect, useRef, useState } from 'react'
-import Zoom from "@mui/material/Zoom";
-import Typography from "@mui/material/Typography";
-import NewChip from '../newChip/NewChip';
+import React, { useEffect, useState } from 'react'
+import { makeStyles, withStyles } from '@mui/styles';
+import Dialog from '@mui/material/Dialog';
+import HealthStatusRoundMeter from '../../../../components/genericComponents/HealthStatusRoundMeter';
+import properties from '../../../../properties/properties';
+import GenerateURL from '../../../../util/APIUrlProvider';
+import InvokeApi from '../../../../util/apiInvoker';
+import { showErrorHandlerUpdated } from '../../../../util/util';
+import { Loading } from '../../../utils/Loading';
+import LinearProgress from '@mui/material/LinearProgress';
 
-const MasterEnvDropdown = (props) => {
+const VMSetHealthDialog = ({ isActive, ...props }) => {
     const classes = useStyles();
-    const rootRef = useRef(null);
-    const { masterEnvList, selectedMasterEnv, masterEnvChangeHandler, removeFromList, error } = props;
-    const [anchorEl, setAnchorEl] = useState(null);
+    const id = props.id ? props.id : null;
+    console.log(id, "fdskjjfsa")
     const [state, setState] = useState({
-        masterEnvList: masterEnvList && masterEnvList.length > 0 ? masterEnvList : [],
+        open: false,
+        data_loading: false
     })
 
-    useEffect(() => {
+const SkeletonRow = () => {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+      <div style={{ display: "flex", gap: "12px", justifyContent: "center", alignItems: "center", marginBottom: "16px" }}>
+        <GenericSkeleton
+          variant="rect"
+          width="154px"
+          height="154px"
+          style={{ borderRadius: "999px" }}
+        />
+        <GenericSkeleton
+          variant="rect"
+          width="154px"
+          height="154px"
+          style={{ borderRadius: "999px" }}
+        />
+      </div>
+      <div style={{ width: "60%", marginBottom: "16px" }}>
+        <GenericSkeleton
+          variant="rect"
+          width="100%"
+          height="60px"
+          style={{ borderRadius: "4px" }}
+        />
+      </div>
+      <div style={{ width: "100%" }}>
+        <GenericSkeleton
+          variant="rect"
+          width="100%"
+          height="70px"
+          style={{ borderRadius: "4px" }}
+        />
+      </div>
+    </div>
+  );
+};
+    function fetchMasterEnvList(id) {
+        var requestInfo = {
+            endPoint: GenerateURL({},
+                properties.api.vm_health_check + "?vm_id=" + id
+            ),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" },
+        };
+        InvokeApi(
+            requestInfo,
+            fetchMasterEnvListDataSuccess,
+            fetchMasterEnvListDataFailed
+        );
 
-        setState(prevState => ({
-            ...prevState,
-            masterEnvList: masterEnvList
+        setState((new_state) => ({
+            ...new_state,
+            data_loading: true,
         }));
-
-    }, [masterEnvList]);
-    console.log(masterEnvList, "masterEnvListmasterEnvList", state.masterEnvList)
-
-    const handleClick = (event) => {
-        setAnchorEl(event.currentTarget);
-    };
-
-    const handleClose = () => {
-        setAnchorEl(null);
-    };
-
-    const open = Boolean(anchorEl);
-
-
-    function onMasterEnvClick(order) {
-        console.log(order, "onMasterEnvClick")
-        masterEnvChangeHandler(order);
-        setState((prevState) => ({
-            ...prevState,
-            search: "",
-        }))
-        handleClose();
     }
 
-    console.log(error, "masterEnvList")
+
+    const transformData = (data) => {
+        const percentage = ((data.cpu_utilization / data.cpu_freq) * 100).toFixed(2);
+        const ram_percentage = ((data.ram_utilization / data.allocated_ram_gb) * 100).toFixed(2);
+        let arr = [
+            {
+                label: "CPU",
+                percentage: percentage,
+                color: "green",
+                allocatedLabel: "Avg Utilization/Cores",
+                allocatedValue: data.cpu_utilization + "/" + data.cpu_freq,
+            },
+            {
+                label: "RAM",
+                percentage: ram_percentage,
+                color: "red",
+                allocatedLabel: "Utilized/Allocated",
+                allocatedValue: data.ram_utilization + "/" + data.allocated_ram_gb,
+            }
+        ]
+        return arr
+    }
+
+    // normal warning danger
+
+    const compareDataAndShowStats = (utilization, allocated) => {
+        const utilizationPercentage = (utilization / allocated) * 100;
+
+        if (utilizationPercentage < 30) {
+            return 'normal';
+        } else if (utilizationPercentage <= 60) {
+            return 'warning';
+        } else {
+            return 'danger';
+        }
+    };
+    const compareDataAndShowStatsCPU = (utilizationPercentage) => {
+
+
+        if (utilizationPercentage < 30) {
+            return 'normal';
+        } else if (utilizationPercentage <= 60) {
+            return 'warning';
+        } else {
+            return 'danger';
+        }
+    };
+
+    function fetchMasterEnvListDataSuccess(data) {
+        console.log(data, "fsjkjksd")
+        setState((new_state) => ({
+            ...new_state,
+            data_loading: false,
+            data: data,
+            cpu_data: {
+                percentage: data.avg_cpu_utilization,
+                allocatedValue: data.avg_cpu_utilization + "/" + data["Core(s) per socket"] && data["Core(s) per socket"],
+                allocatedLabel: '',
+                status: compareDataAndShowStatsCPU(data.avg_cpu_utilization),
+                utilization: data.avg_cpu_utilization + "%",
+                allocated: "",
+                meter_label: 'CPU',
+                label: "Avg Utilization"
+            },
+            ram_data: {
+
+                percentage: data.ram_utilization,
+                allocatedValue: data.ram_used_in_gb + "/" + data.ram_allocated_in_gb,
+                utilization: data.ram_used_in_gb + " GB",
+                allocated: data.ram_allocated_in_gb + " GB",
+                meter_label: 'RAM',
+                allocatedLabel: '',
+                label: null,
+                status: compareDataAndShowStats(data.ram_used_in_gb, data.ram_allocated_in_gb),
+            }
+
+        }));
+    }
+    function fetchMasterEnvListDataFailed(error) {
+        console.log(error, "error_msgerror_msg")
+        const error_msg = error.detail
+        setState((new_state) => ({
+            ...new_state,
+            error: error_msg,
+            data_loading: false,
+        }));
+    }
+
+    const handleClickOpen = () => {
+        if (id) {
+            fetchMasterEnvList(id)
+        }
+
+        setState(prev_state => ({
+            ...prev_state,
+            open: true
+        }))
+    }
+
+    const handleClose = () => {
+        setState(prev_state => ({
+            ...prev_state,
+            open: false
+        }))
+    }
+
 
     return (
-      <>
-        <p className="font-14 color-primary">
-          Select Environment Restriction
-          <span className="" style={{ color: "red" }}>
-            *
-          </span>
-          <Tooltip
-            TransitionComponent={Zoom}
-            title={
-              <Typography
-                variant="body2"
-                style={{ whiteSpace: "pre-line", color: "white" }}
-              >
-                {
-                  "In Buildpiper, we have different environments categorized into lower and higher environments. Lower environments are designated for developers, QA, and UAT colleagues, while the higher environment is specifically reserved for production. Therefore, Environment Restriction refers to the environment to which the user wants to associate the VM groups."
-                }
-              </Typography>
-            }
-            style={{ marginLeft: "4px" }}
-            placement="right"
-          >
-            <i className="ri-information-line"></i>
-          </Tooltip>
-        </p>
-        <div
-          ref={rootRef}
-          className={error ? `${classes.root} error` : classes.root}
-          onClick={handleClick}
-          style={open ? { borderColor: "#0086FF" } : {}}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              handleClick();
-            }
-          }}
-        >
-          <div className="selected-label">
-            <div className="selected-env font-14 d-flex align-center avtar">
-              {selectedMasterEnv && selectedMasterEnv.length > 0
-                ? selectedMasterEnv.map((item) => (
-                    <NewChip
-                      variant="info"
-                      size="md"
-                      shape="pill"
-                      ariaLabel={`Remove ${item.tabName}`}
-                      
-                      label={
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            width: "100%",
-                            gap: "8px",
-                          }}
-                        >
-                          <span className="font-12 font-weight-600">
-                            {item.tabName}
-                          </span>
-
-                          <div
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeFromList(item.order);
-                            }}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                removeFromList(item.order);
-                              }
-                            }}
-                          >
-                            <span
-                              className="font-14 font-weight-600 cursor-pointer ri-close-fill"
-                              style={{ color: "#0086ff" }}
-                            />
-                          </div>
+        <>
+            <button style={{ cursor: isActive ? 'pointer' : 'not-allowed' }} className="btn btn-transparent" onClick={isActive ? handleClickOpen : null} >
+                <span className='ri-heart-pulse-line font-18' style={{ color: isActive ? '#124D9B' : '#808080c4' }}></span>
+            </button>
+            <Dialog
+                fullWidth={true}
+                maxWidth={'md'}
+                open={state.open}
+                onClose={handleClose}
+                className={`${classes.root} dialog-align-corner`}
+                aria-labelledby="max-width-dialog-title"
+            >
+                <div className='d-grid ml-auto dialog-sub-component' style={{ gridTemplateColumns: '650px' }}>
+                    <div className='right-panel-dialog bg-white'>
+                        <div className='font-18 font-weight-600 color-white d-flex align-center space-between' style={{ backgroundColor: '#0086ff', padding: '13.5px 20px' }}>
+                            <p>Service Health</p>
+                            <button
+                                className='btn float-cancel-button'
+                                style={{ left: '296px' }}
+                                onClick={handleClose}
+                            >
+                                <span className='ri-close-line'></span>
+                            </button>
                         </div>
-                      }
-                    />
-                  ))
-                : "Please Select"}
-            </div>
-          </div>
-        </div>
+                        <div className='' style={{ padding: '16px' }}>
+                            {
+                                state.data_loading ? <SkeletonRow />
+                                    :
+                                    state.error ?
+                                        <p className='error-msg'>
+                                            {state.error}
+                                        </p>
+                                        :
+                                        <>
+                                            <div className='d-flex align-center m-auto space-between' style={{ width: '50%' }}>
+                                                <HealthStatusRoundMeter data={[state.cpu_data]} useNewMeter={true} />
+                                                <HealthStatusRoundMeter data={[state.ram_data]} useNewMeter={true} />
+                                            </div>
+                                            <div className='mb-16' style={{ border: '1px solid #E6E6E6', borderRadius: '4px', padding: '10px' }}>
+                                                <p className='color-tertiary mb-5 font-14'>CPU SPECS</p>
+                                                <p className='color-primary mb-5 font-14'>
 
-        <Popover
-          open={open}
-          anchorEl={anchorEl}
-          onClose={handleClose}
-          anchorOrigin={{
-            vertical: "bottom",
-            horizontal: "center",
-          }}
-          transformOrigin={{
-            vertical: "top",
-            horizontal: "center",
-          }}
-          PaperProps={{
-            style: {
-              overflow: "visible",
-              marginTop: "10px",
-              borderRadius: "6px",
-            },
-          }}
-        >
-          <div
-            className={classes.popover}
-            style={{
-              width: rootRef.current ? rootRef.current.clientWidth : "auto",
-            }}
-          >
-            <div className="env-list">
-              {state?.masterEnvList.length > 0 ? (
-                state.masterEnvList.map((ele, i) => {
-                  const isSelected =
-                    selectedMasterEnv && selectedMasterEnv.length > 0
-                      ? selectedMasterEnv.some((env) => env.order === ele.order)
-                      : null;
-
-                  if (ele.tabName.length > 32) {
-                    return (
-                      <Tooltip key={ele.order} title={ele.tabName}>
-                        <div
-                          className={
-                            isSelected
-                              ? "env-item font-14 selected-item"
-                              : "env-item font-14"
-                          }
-                          onClick={() => onMasterEnvClick(ele.order)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              onMasterEnvClick(ele.order);
+                                                    {state.data && state.data["Core(s) per socket"] ? state.data["Core(s) per socket"] : "N/A"} Cores, {state.data && state.data["Thread(s) per core"] ? state.data["Thread(s) per core"] : "N/A"}
+                                                    {state.data && state.data["Thread(s) per core"] ? state.data["Thread(s) per core"] == 1 ? " Thread Per Core" : " Threads Per Core" : null}
+                                                    {/* &nbsp;{state.data && state.data["cpu_speed"] ? state.data.cpu_speed.toFixed(2) + " MHz" : "N/A"} CPU Speed */}
+                                                </p>
+                                            </div>
+                                            {/* <div className='mb-16' style={{ border: '1px solid #E6E6E6', borderRadius: '4px', padding: '10px' }}>
+                                                <p className='color-tertiary mb-5 font-14'>MEMORY SPECS</p>
+                                                <p className='color-primary mb-5 font-14'>
+                                                   
+                                                Used Ram: {state?.data?.ram_used_in_gb} GB, Allocated Ram: {state?.data?.ram_allocated_in_gb} GB
+                                                </p>
+                                            </div> */}
+                                            <div className={classes.rooter} style={{ border: '1px solid #E6E6E6', borderRadius: '4px', padding: '10px' }}>
+                                                <p className='color-tertiary mb-5 font-14'>STORAGE</p>
+                                                <div className='d-flex align-center space-between'>
+                                                    <p className='font-12 color-primary'>{
+                                                        (state.data && state.data.total_disk_storage ?
+                                                            state.data.total_disk_storage.total_used_gb ?
+                                                                state.data.total_disk_storage.total_used_gb.toFixed(2) : "N/A" : "N/A")} / {
+                                                            (
+                                                                state.data && state.data.total_disk_storage ?
+                                                                    state.data.total_disk_storage.total_size_gb ?
+                                                                        state.data.total_disk_storage.total_size_gb.toFixed(2) : "N/A" : "N/A"
+                                                            )} GB</p>
+                                                    <p className='font-12 color-tertiary'>{(state?.data?.total_disk_storage?.total_size_gb - state?.data?.total_disk_storage?.total_used_gb).toFixed(2)} GB available</p>
+                                                </div>
+                                                <BorderLinearProgress variant="determinate"
+                                                    value={((state?.data?.total_disk_storage?.total_used_gb / state?.data?.total_disk_storage?.total_size_gb) * 100).toFixed(2)} />
+                                            </div>
+                                        </>
                             }
-                          }}
-                        >
-                          <span className="component-env-name">
-                            {ele.tabName}
-                          </span>
-                          {isSelected && (
-                            <span
-                              className="ri-checkbox-circle-fill font-17"
-                              style={{ color: "#0086FF" }}
-                            ></span>
-                          )}
+
+                            <div>
+
+                            </div>
                         </div>
-                      </Tooltip>
-                    );
-                  } else {
-                    return (
-                      <div
-                        key={ele.order}
-                        className={
-                          isSelected
-                            ? "env-item font-14 selected-item"
-                            : "env-item font-14"
-                        }
-                        onClick={() => onMasterEnvClick(ele.order)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            onMasterEnvClick(ele.order);
-                          }
-                        }}
-                      >
-                        <span className="component-env-name">
-                          {ele.tabName}
-                        </span>
-                        {isSelected && (
-                          <span
-                            className="ri-checkbox-circle-fill font-17"
-                            style={{ color: "#0086FF" }}
-                          ></span>
-                        )}
-                      </div>
-                    );
-                  }
-                })
-              ) : (
-                <div className="d-flex align-center justify-center width-full">
-                  No Result Found
+                    </div>
                 </div>
-              )}
-            </div>
-          </div>
-        </Popover>
-      </>
-    );
+            </Dialog>
+
+        </>
+    )
 }
+
+export default VMSetHealthDialog
+
+const BorderLinearProgress = withStyles((theme) => ({
+    root: {
+        height: 10,
+        borderRadius: 5,
+    },
+    colorPrimary: {
+        backgroundColor: theme.palette.grey[theme.palette.type === 'light' ? 200 : 700],
+    },
+    bar: {
+        borderRadius: 5,
+        backgroundColor: '#1a90ff',
+    },
+}))(LinearProgress);
 
 const useStyles = makeStyles((theme) => ({
-
     root: {
-        backgroundColor: "#fff",
-        border: "1px solid #b7b7b7",
-        display: "flex",
-        padding: "8px 10px 8px 10px",
-        alignItems: "center",
-        gap: "12px",
-        alignSelf: "stretch",
-        borderRadius: "4px",
-        cursor: "pointer",
-        '& .selected-label': {
-            display: "flex",
-            alignItems: "center",
-            gap: "3px",
-            width: "100%"
-        },
-        '& .selected-env': {
-            display: "inline-block",
-            fontWeight: "500",
-            color: "#2F2F2F",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-            lineHeight: 2
-        },
-        '& .env-type': {
-            display: "inline-flex",
-            padding: "4px 8px",
-            alignItems: "flex-start",
-            borderRadius: "4px",
-            gap: "10px",
-            //fontSize: "10px",
-            fontWeight: "700",
-            color: "#FFF",
-            width: "fit-content",
-        },
+        '&.dialog-align-corner': {
+            '& .MuiPaper-root': {
+                maxWidth: '1000px'
+            }
 
-        '&:hover': {
-            borderColor: "#b7b7b7",
         },
-        '& .default-template-chip': {
-            backgroundColor: '#EBF5FF',
-            border: '1px solid #dfedff',
-            color: '#0086ff',
-            fontSize: '11px',
-            fontWeight: '600',
-            padding: '3px 6px',
-            textTransform: 'uppercase',
-            borderRadius: '4px',
-            marginLeft: '5px'
-        },
-        '& .default-template-chip-green': {
-            backgroundColor: '#E6FBEA',
-            border: '1px solid #C6E9D9',
-            color: '#129E5B',
-            fontSize: '11px',
-            fontWeight: '600',
-            padding: '3px 6px',
-            textTransform: 'uppercase',
-            borderRadius: '4px',
-            marginLeft: '5px'
-        }
-    },
-    popover: {
-        //width: "100%",
-        display: "flex",
-        width: "540px",
-        flexDirection: "column",
-        alignItems: "flex-start",
-        gap: "5px",
-        borderRadius: "6px",
-        border: "1px solid #F4F4F4",
-        background: "#FFF",
-        boxShadow: "0px 4px 12px 0px rgba(0, 0, 0, 0.08)",
-        '& .search-container': {
-            display: "flex",
-            padding: "10px 12px",
-            justifyContent: "space-between",
-            alignItems: "center",
-            alignSelf: "stretch",
-            width: "100%",
-            height: "40px",
-            borderBottom: "1px solid #E6E6E6",
-            '& .search-input': {
-                border: "none",
-                padding: "0",
-
-                '&:focus': {
-                    border: "none !important",
-                    outline: "none !important",
-                }
-            },
-        },
-        '& .list-heading': {
-            display: "flex",
-            padding: "6px 12px 0px 12px",
-            alignItems: "flex-start",
-            gap: "10px",
-            alignSelf: "stretch",
-            textTransform: "uppercase",
-            fontSize: "12px",
-            fontWeight: "600",
-            color: "#949494",
-        },
-        '& .env-type-list': {
-            display: "flex",
-            padding: "6px 12px 0px 12px",
-            //flexDirection: "column",
-            alignItems: "flex-start",
-            gap: "10px",
-            alignSelf: "stretch",
-            '& .env-tab': {
-                display: "flex",
-                padding: "6px 10px",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: "10px",
-                borderRadius: "6px",
-                border: "1px solid #E6E6E6",
-                background: "#FFF",
-                //fontSize: "12px",
-                fontWeight: "500",
-                cursor: "pointer",
-                '&:hover': {
-                    background: "#f4f4f4",
-                }
-            },
-            '& .selected-env-tab': {
-                background: "#0086FF",
-                color: "#FFF",
-                border: "none",
-                '&:hover': {
-                    background: "#0086FF !important",
-                }
+        '& .input-with-icon': {
+            position: 'relative',
+            '& .cent-icon': {
+                width: '40px',
+                height: '44px',
+                backgroundColor: '#fafafa',
+                position: 'absolute',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '14px',
+                fontWeight: 500,
+                top: '22px',
+                right: '1px',
+                borderRadius: '0px 4px 4px 0px',
+                borderLeft: '1px solid #b7b7b7'
             }
         },
-        '& .env-list': {
-            display: "flex",
-            paddingBottom: "8px",
-            flexDirection: "column",
-            alignItems: "flex-start",
-            alignSelf: "stretch",
-            height: "180px",
-            overflowY: "scroll",
-            '& .env-item': {
-                display: "flex",
-                padding: "8px 12px",
-                justifyContent: "space-between",
-                alignItems: "center",
-                alignSelf: "stretch",
-                cursor: "pointer",
-                '&:hover': {
-                    background: "#f4f4f4",
-                },
-                '& .component-env-name': {
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                }
-            },
-            '& .selected-item': {
-                background: "#F5FAFF",
-            },
-            '& .default-template-chip': {
-                backgroundColor: '#EBF5FF',
-                border: '1px solid #dfedff',
-                color: '#0086ff',
-                fontSize: '11px',
-                fontWeight: '600',
-                padding: '3px 6px',
-                textTransform: 'uppercase',
-                borderRadius: '4px',
-                marginLeft: '5px',
+        '& .left-panel-dialog': {
+            width: '396px',
+            transition: 'width 5s',
 
+            '& .left-panel-header': {
+                borderBottom: '1px solid #f1f1f1'
             },
-            '& .default-template-chip-green': {
-                backgroundColor: '#E6FBEA',
-                border: '1px solid #C6E9D9',
-                color: '#129E5B',
-                fontSize: '11px',
-                fontWeight: '600',
-                padding: '3px 6px',
-                textTransform: 'uppercase',
-                borderRadius: '4px',
-                marginLeft: '5px'
+            '& .checkbox-only-divi': {
+                position: 'absolute',
+                bottom: '10px'
+            },
+        },
+        '& .left-panel-dialog-down': {
+            width: '0px',
+            overflow: 'hidden',
+            transition: `'width 5s', 'overflow 1s'`,
+
+        },
+        '& .footer-right-panel': {
+            backgroundColor: '#fafafa',
+            padding: '20px',
+            position: 'absolute',
+            bottom: '0px',
+            width: '550px',
+
+            // width:'100%',
+            '& button': {
+                // marginLeft: 'auto'
             }
         }
-    },
-    root_error_class: {
-        backgroundColor: "#fce4e4 !important",
-        border: "1px solid #cc0033",
-    },
-}))
-
-MasterEnvDropdown.defaultProps = {
-    selectedEnvTab: null,
-    envChangeHandler: () => { },
-    selectedMasterEnv: null,
-    masterEnvChangeHandler: () => { },
-    removeFromList: () => { }
-}
-
-export default MasterEnvDropdown
+    }
+}));
