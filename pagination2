@@ -1,250 +1,655 @@
-import React, { useEffect, useState } from 'react';
-import { makeStyles, usePagination } from './ui/index';
-import { Input } from './genericComponents/Input';
-import { getLimitFromUrl } from '../util/util';
+import React, { useState, useEffect } from "react";
+import { makeStyles } from "@mui/styles";
+import Dialog from "@mui/material/Dialog";
+import { Input } from "../../../../components/genericComponents/Input";
+import MasterEnvDropdown from "../../../../components/genericComponents/MasterEnvDropdown";
+import GenerateURL from "../../../../util/APIUrlProvider";
+import properties from "../../../../properties/properties";
+import InvokeApi, { PostData } from "../../../../util/apiInvoker";
+import { useCustomSnackbar } from "../../../../contexts/SnackbarContext";
+import { VALIDATION_TYPE_REQUIRED, ValidateDataSet } from "../../../../util/Validator";
+import { showErrorHandlerUpdated } from "../../../../util/util";
+import Button from "../../../../components/genericComponents/Button";
+import GenericSkeleton from "../../../../components/genericComponents/Skeletons/GenericSkeleton";
+import { getCommonFunctions } from "../../../serviceRevamp/add/ci_flow/SourceDetails";
 
-import PropTypes from 'prop-types';
-import { useCustomSnackbar } from '../contexts/SnackbarContext';
-
-const useStyles = makeStyles({
-  ul: {
-    listStyle: 'none',
-    padding: 0,
-    margin: 0,
-    display: 'flex',
-    '& .btn-selected': {
-      border: '1px solid #DFEDFF !important',
-      backgroundColor: '#F5FAFF !important',
-      padding: '10px',
-      borderRadius: '8px',
-      fontSize: '14px',
-      fontWeight: '600!important',
-      color: '#2f2f2f',
-      lineHeight: '1.2'
-    },
-    '& .btn-transparent': {
-      padding: '10px',
-      margin: '0px!important',
-      fontSize: '14px',
-      fontWeight: '600!important',
-      border: '1px solid transparent',
-      lineHeight: '1.2'
-    }
-  },
-});
-
-export default function PaginationTwo(props) {
+const AddVirtualMachineDialog = ({
+  open = true,
+  handleSuccess,
+  handleClose,
+  editData = null
+}) => {
   const classes = useStyles();
   const { showSnackbar } = useCustomSnackbar();
-  const disable_go_to_page_number = props.disable_go_to_page_number ? props.disable_go_to_page_number : null;
-  const current_page_count = props.current_page_count;
-  const [limit, setLimit] = useState(10);
+  const [isOpen, setIsOpen] = useState(open);
+  const localStorageKey = "vm_group_creation_info_flag";
+  const hideInfoSection = JSON.parse(localStorage.getItem(localStorageKey));
+
   const [state, setState] = useState({
-    data: {
-      page_number: current_page_count ? current_page_count : 1,
-      go_page_number: current_page_count ? current_page_count : 1,
-    },
-    error: {}
-  });
-
-  const { next, on_next_click, previous, on_previous_click, total_count, on_pageNumber_click, count = 0 } = props;
-
-  const offset = (state.data.page_number - 1) * limit;
-  const start = (state.data.page_number - 1) * limit + 1;
-
-  const end = Math.min(state.data.page_number * limit, Number(count));
- 
-  const { items } = usePagination({
-    count: total_count,
-    page: state.data.page_number,
-    onChange: (event, page) => handlePageNumberClick(page),
+    showLeftPanel: true,
+    isLoading: false,
+    isSaving: false,
+    isEditMode: false,
+    dontShowAgain: false,
+    data: {},
+    error: {},
+    master_envs_list: [],
+    selectedMasterEnv: [],
+    env_data_loading: false,
   });
 
   useEffect(() => {
-    if (next) {
-      setLimit(getLimitFromUrl(next));
-    } else if (previous) {
-      setLimit(getLimitFromUrl(previous));
-    }
-  }, [next, previous]);
+    setIsOpen(open);
+  }, [open]);
 
-  const handleNextClick = () => {
-    const nextPage = state.data.page_number + 1;
-    if (on_next_click && typeof on_next_click === 'function') {
-      on_next_click(nextPage);
+  useEffect(() => {
+    if (open) {
+      fetchMasterEnvList();
     }
-    setState(prevState => ({
-      ...prevState,
-      data: { ...prevState.data, page_number: nextPage, go_page_number: nextPage }
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      if (editData) {
+        setState(prev => ({ ...prev, isEditMode: true }));
+        fetchVMGroupDetails(editData.id || editData);
+      } else {
+        resetForm();
+      }
+    }
+  }, [open, editData]);
+
+  useEffect(() => {
+    if (
+      state.master_envs_list.length > 0 &&
+      state.data.environment_master_type &&
+      Array.isArray(state.data.environment_master_type)
+    ) {
+      const envIds = state.data.environment_master_type.map(id => String(id));
+
+      const filteredEnvs = state.master_envs_list.filter((item) =>
+        envIds.includes(String(item.order))
+      );
+
+      const currentIds = state.selectedMasterEnv.map(env => env.order).sort();
+      const newIds = filteredEnvs.map(env => env.order).sort();
+      const isDifferent = JSON.stringify(currentIds) !== JSON.stringify(newIds);
+
+      if (isDifferent && filteredEnvs.length > 0) {
+        console.log("Updating selectedMasterEnv from useEffect:", filteredEnvs);
+        setState((prev) => ({
+          ...prev,
+          selectedMasterEnv: filteredEnvs,
+        }));
+      }
+    }
+  }, [state.master_envs_list, state.data.environment_master_type]);
+
+    const commonFunctions = getCommonFunctions(state, setState, {})
+  const resetForm = () => {
+    setState((prev) => ({
+      ...prev,
+      showLeftPanel: !hideInfoSection,
+      isLoading: false,
+      dontShowAgain: !!hideInfoSection,
+      data: {},
+      error: {},
+      selectedMasterEnv: [],
+      isEditMode: false,
     }));
   };
 
-  const handlePreviousClick = () => {
-    const previousPage = state.data.page_number - 1;
-    if (on_previous_click && typeof on_previous_click === 'function') {
-      on_previous_click(previousPage);
+  const fetchVMGroupDetails = (vmGroupId) => {
+    setState((prev) => ({ ...prev, isLoading: true }));
+
+    const requestInfo = {
+      endPoint: GenerateURL({ edit_id: vmGroupId }, properties.api.edit_vm_group),
+      httpMethod: "GET",
+      httpHeaders: { "Content-Type": "application/json" },
+    };
+
+    InvokeApi(
+      requestInfo,
+      fetchVMGroupDetailsSuccess,
+      fetchVMGroupDetailsFailed
+    );
+  };
+
+  const fetchVMGroupDetailsSuccess = (data) => {
+    let environmentIds = [];
+    if (data.env_obj && Array.isArray(data.env_obj)) {
+      environmentIds = data.env_obj.map(env => env.id);
+    } else if (data.environment_master_type && Array.isArray(data.environment_master_type)) {
+      environmentIds = data.environment_master_type;
     }
-    setState(prevState => ({
-      ...prevState,
-      data: { ...prevState.data, page_number: previousPage, go_page_number: previousPage }
+
+    const newData = {
+      virtual_group_name: data.virtual_group_name || '',
+      environment_master_type: environmentIds,
+    };
+
+
+    if (state.master_envs_list.length > 0 && environmentIds.length > 0) {
+
+      const envIdsStrings = environmentIds.map(id => String(id));
+
+      const filteredEnvs = state.master_envs_list.filter((item) =>
+        envIdsStrings.includes(String(item.order))
+      );
+
+      setState((prev) => ({
+        ...prev,
+        showLeftPanel: !hideInfoSection,
+        isLoading: false,
+        dontShowAgain: !!hideInfoSection,
+        data: newData,
+        error: {},
+        selectedMasterEnv: filteredEnvs,
+      }));
+    } else {
+      setState((prev) => ({
+        ...prev,
+        showLeftPanel: !hideInfoSection,
+        isLoading: false,
+        dontShowAgain: !!hideInfoSection,
+        data: newData,
+        error: {},
+      }));
+    }
+  };
+
+  const fetchVMGroupDetailsFailed = (error) => {
+    showSnackbar("error", "Failed to fetch VM group details", error?.message);
+    setState((prev) => ({
+      ...prev,
+      isLoading: false,
+      error: error || {},
     }));
   };
 
-  const handlePageNumberClick = (page) => {
-    if (on_pageNumber_click && typeof on_pageNumber_click === 'function') {
-      on_pageNumber_click(page);
+  function fetchMasterEnvList() {
+    setState((prev) => ({ ...prev, env_data_loading: true }));
+
+    const requestInfo = {
+      endPoint: GenerateURL({}, properties.api.master_envs),
+      httpMethod: "GET",
+      httpHeaders: { "Content-Type": "application/json" },
+    };
+
+    InvokeApi(
+      requestInfo,
+      fetchMasterEnvListDataSuccess,
+      fetchMasterEnvListDataFailed
+    );
+  }
+
+  function fetchMasterEnvListDataSuccess(data) {
+    setState((prev) => ({
+      ...prev,
+      master_envs_list: data.map((item) => ({
+        tabName: item.name,
+        order: item.id,
+      })),
+      env_data_loading: false,
+    }));
+  }
+
+  function fetchMasterEnvListDataFailed(error) {
+    showSnackbar("error", "Failed to fetch environments", error?.message);
+    setState((prev) => ({
+      ...prev,
+      error: error,
+      env_data_loading: false,
+    }));
+  }
+
+  const updateMasterEnv = (master_env_order) => {
+    let filter_current_env = state.master_envs_list.find(
+      (item) => item.order === master_env_order
+    );
+
+    if (filter_current_env) {
+      setState((prev) => {
+        const isAlreadySelected = prev.selectedMasterEnv.some(
+          (env) => env.order === master_env_order
+        );
+
+        if (!isAlreadySelected) {
+          return {
+            ...prev,
+            selectedMasterEnv: [...prev.selectedMasterEnv, filter_current_env],
+            error: { ...prev.error, selectedMasterEnv: "" },
+          };
+        }
+        return prev;
+      });
     }
-    setState(prevState => ({
-      ...prevState,
-      data: { ...prevState.data, page_number: page, go_page_number: page }
+  };
+
+  const removeMasterEnv = (order) => {
+    setState((prev) => ({
+      ...prev,
+      selectedMasterEnv: prev.selectedMasterEnv.filter(
+        (env) => env.order !== order
+      ),
     }));
   };
 
-  const handlePageNumberInput = (event) => {
-    const value = event.target.value;
-    setState(prevState => ({
-      ...prevState,
+  const updateSelectedMasterEnv = (data) => {
+    console.log(data, "updateSelectedMasterEnv");
+  };
+
+  const onChangeHandler = (e) => {
+    const { name, value } = e.target;
+    setState((prev) => ({
+      ...prev,
       data: {
-        ...prevState.data,
-        go_page_number: value,
+        ...prev.data,
+        [name]: value,
+      },
+      error: {
+        ...prev.error,
+        [name]: "",
       },
     }));
   };
 
-  const showInvalidPageSnackbar = (page_number) => {
-    showSnackbar(
-      "error",
-      "Invalid Page Number",
-      `Please enter a valid page number between 1 and ${total_count}.`
-    );
-  };
+  const validateAndSave = () => {
+    const validations = {
+      virtual_group_name: [VALIDATION_TYPE_REQUIRED],
+    };
 
-  const onKeyEnter = e => {
-    let page_number = Number(state.data.go_page_number);
-    if (e.key === "Enter") {
-      if (page_number > 0 && page_number <= total_count) {
-        handlePageNumberClick(page_number);
-      } else {
-        showInvalidPageSnackbar(page_number);
-      }
+    const result = ValidateDataSet(state.data, validations);
+
+    if (!state.selectedMasterEnv || state.selectedMasterEnv.length === 0) {
+      result.valid = false;
+      result.error = {
+        ...result.error,
+        selectedMasterEnv: "Please select at least one environment",
+      };
     }
-  };
 
-  const goToPageNumber = () => {
-    const page_number = Number(state.data.go_page_number);
-    if (page_number > 0 && page_number <= total_count) {
-      handlePageNumberClick(page_number);
+    if (result.valid) {
+      const post_data = {
+        virtual_group_name: state.data.virtual_group_name?.trim(),
+        environment_master_type: state.selectedMasterEnv.map(
+          (item) => item.order
+        ),
+      };
+
+      const isEdit = editData !== null;
+
+      const temp_url = isEdit
+        ? GenerateURL({ edit_id: editData.id || editData }, properties.api.edit_vm_group)
+        : GenerateURL({}, properties.api.create_vm_group);
+
+
+      setState((prev) => ({ ...prev, isSaving: true }));
+      const loadingMsg = isEdit ? "Updating VM Group..." : "Creating VM Group...";
+      showSnackbar("info", loadingMsg);
+
+
+      PostData(temp_url, post_data, saveSuccess, saveFail);
     } else {
-      showInvalidPageSnackbar(page_number);
+      let error_msg = showErrorHandlerUpdated({ ...result.error });
+      const errorMsg = editData ? "Unable to update VM group." : "Unable to create VM group.";
+      showSnackbar("error", errorMsg, error_msg);
+      setState((prev) => ({
+        ...prev,
+        error: result.error,
+        isSaving: false,
+      }));
     }
   };
+
+  function saveSuccess(response) {
+    const isEdit = editData !== null;
+    const successMsg = isEdit ? "VM group updated successfully." : "VM group created successfully.";
+    const detailMsg = isEdit ? "Changes have been saved." : "Please continue with add VM";
+
+    showSnackbar("success", successMsg, detailMsg);
+    setState((prev) => ({
+      ...prev,
+      isSaving: false,
+    }));
+
+    if (handleSuccess) {
+      handleSuccess(response);
+    }
+
+    closeDialog();
+  }
+
+  function saveFail(response) {
+    const isEdit = editData !== null;
+    let error_msg = showErrorHandlerUpdated(response);
+    const errorMsg = isEdit ? "Unable to update VM group." : "Unable to create VM group.";
+    showSnackbar("error", errorMsg, error_msg);
+
+    const errorObj = typeof response === 'string'
+      ? { general: response }
+      : (response || {});
+
+    setState((prev) => ({
+      ...prev,
+      isSaving: false,
+      error: {
+        ...prev.error,
+        ...errorObj,
+      },
+    }));
+  }
+
+  const handleCloseLeftStrip = () => {
+    if (state.dontShowAgain) {
+      localStorage.setItem(localStorageKey, JSON.stringify(true));
+    }
+    setState((prev) => ({
+      ...prev,
+      showLeftPanel: false,
+    }));
+  };
+
+  const handleDontShowCheckbox = (e) => {
+    const value = e?.target?.type === "checkbox" ? e.target.checked : e;
+    setState((prev) => ({ ...prev, dontShowAgain: value }));
+  };
+
+  const closeDialog = () => {
+    // resetForm(); 
+    setIsOpen(false);
+    if (handleClose) handleClose();
+  };
+
+  const dialogTitle = state.isEditMode ? "Edit Virtual Machine Group" : "Add Virtual Machine Group";
 
   return (
-    <>
-      <div className='d-grid space-between align-center' style={disable_go_to_page_number ? { gridTemplateColumns: '1fr 1fr', width: '100%', gap: '10px' } : { gridTemplateColumns: '1fr 1fr 350px', width: '100%', gap: '10px' }}>
-        <nav>
-          <ul className={classes.ul}>
-            {items.map(({ page, type, selected,disabled, ...item }, index) => {
-              let children = null;
+    <Dialog
+      fullWidth={true}
+      maxWidth={"md"}
+      open={isOpen}
+      onClose={closeDialog}
+      className={`${classes.root} dialog-align-corner`}
+      aria-labelledby="max-width-dialog-title"
+    >
+      <div
+        className="d-grid ml-auto dialog-sub-component"
+        style={{
+          gridTemplateColumns: state.showLeftPanel
+            ? "396px 650px"
+            : "0px 650px",
+        }}
+      >
+        {!hideInfoSection && (
+          <div
+            className={
+              state.showLeftPanel
+                ? "left-panel-dialog bg-white position-relative"
+                : "left-panel-dialog-down"
+            }
 
-              if (type === 'start-ellipsis' || type === 'end-ellipsis') {
-                children = <button className='btn btn-transparent' style={{ paddingLeft: '0px', paddingRight: '0px' }}>…</button>;
-              } else if (type === 'page') {
-                children = (
-                  <button
-                    type="button"
-                    className={selected ? 'btn-selected' : 'btn btn-transparent'}
-                    style={selected ? { border: '1px solid #DFEDFF', backgroundColor: '#F5FAFF' } : undefined}
-                    onClick={() => handlePageNumberClick(page)}
-                    {...item}
-                  >
-                    {page}
-                  </button>
-                );
-              } else if (type === 'previous') {
-                children = (
-                  <button
-                    type="button"
-                    className='btn btn-transparent'
-                    onClick={handlePreviousClick}
-                    disabled={disabled}
-                    >
-                    <span className="ri-arrow-left-s-line"></span>
-                  </button>
-                );
-              } else if (type === 'next') {
-                children = (
-                  <button
-                    type="button"
-                    className='btn btn-transparent'
-                    onClick={handleNextClick}
-                    disabled={disabled}
-                    >
-                    <span className="ri-arrow-right-s-line"></span>
-                  </button>
-                );
-              } else {
-                children = (
-                  <button
-                    className='btn btn-transparent'
-                    type="button"
-                    {...item}>
-                    {type}
-                  </button>
-                );
+          >
+            <div
+              className={
+                "d-flex align-center space-between left-panel-header pd-10"
               }
-              return <li key={index}>{children}</li>;
-            })}
-          </ul>
-        </nav>
-        <p className={`${!disable_go_to_page_number ? "font-14 font-weight-600 text-center" : "font-14 font-weight-600 text-right"}`}  >
-          <span className='color-primary'>{start + " - " + end} </span><span className='color-tertiary'>&nbsp;of {count}</span>
-        </p>
-        {
-          !disable_go_to_page_number &&
-            <div className='d-flex align-center space-between'>
-              <p className='font-14 font-weight-500'>Go to Page Number:</p>
-              <div className='input-mb-0 d-grid' style={{ gridTemplateColumns: '100px 82px', gap: '5px' }}>
-                <Input
-                  name="go_page_number"
-                  varient="handle-keys"
-                  type="number"
-                  placeholder= "enter no" className="color-tertiary font-14 font-weight-400"
-                  data={state.data}
-                  error={state.error}
-                  
-                  onChangeHandler={handlePageNumberInput}
-                  onKeyPress={onKeyEnter}
-                />
-                <button className='btn btn-pagintaion mr-0 font-14' onClick={goToPageNumber}>Go</button>
+              style={{ padding: "11px 20px" }}
+            >
+              <p>INFORMATION</p>
+              <button
+                className="btn btn-icon-only"
+                onClick={handleCloseLeftStrip}
+              >
+                <span className="ri-close-line color-icon-secondary"></span>
+              </button>
+            </div>
+            <div className="pd-10" style={{ padding: "16px 20px" }}>
+              <p className="font-16 font-weight-600 color-primary mb-10">
+                What are VM Groups?
+              </p>
+              <ul class="font-weight-400 font-12 text-grey-40 pl-20 ">
+                <span>
+                  A VM Group is a logical collection of virtual machines that are managed together as a single entity. This allows you to apply configurations, scaling rules, and deployment pipelines to a set of VMs rather than managing each one individually.</span>
+                 <br/>
+                  <br/>
+                  <strong>Key Functionalities</strong>
+                  <br/>
+                  <br/>
+                <li>
+                  Unified Management: Organize VMs based on their purpose (e.g., "Database Cluster," "Legacy Auth Service," or "Department-specific VMs") for quick access and bulk actions.
+                </li>
+                <br/>
+                <li>
+                   Seamless Hybrid Orchestration:VM Groups unify modern and legacy infrastructure by enabling a single CI/CD pipeline to build and deploy both microservices (Kubernetes) and non-microservices (VMs). This "Single Pane of Glass" management eliminates fragmented tooling and dissolves "Ops Silos," ensuring consistent delivery across the entire stack.
+                </li>
+                <br/>
+                <li>
+                  Placement Constraints: VM Groups help optimize performance by ensuring resource-heavy VMs aren't all placed on the same physical host, or improving fault tolerance by spreading them across clusters.
+                </li>
+              </ul>
+
+
+
+
+            </div>
+            <div
+              className="checkbox-only-divi"
+              style={{ padding: "10px 20px" }}
+            >
+              <Input
+                style={{}}
+                type="simple-checkbox"
+                name="dont_show_again"
+                label="Don't show this again"
+                data={{ dont_show_again: state.dontShowAgain }}
+                value={state.dontShowAgain}
+                error={state.error}
+                onChangeHandler={handleDontShowCheckbox}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="right-panel-dialog bg-white">
+          <div
+            className="font-18 font-weight-600 color-white d-flex align-center space-between"
+            style={{ backgroundColor: "#0086ff", padding: "16px 16px" }}
+          >
+            <p>{dialogTitle}</p>
+            <button
+              className="btn float-cancel-button "
+              style={
+                hideInfoSection || !state.showLeftPanel
+                  ? {
+                    position: "absolute",
+                    top: "0px",
+                    height:"58px",
+                    width:"54px",
+                    left: "-55px",
+                    zIndex: 1000,
+                  }
+                  : {
+                    position: "absolute",
+                    top: "0px",
+                    height:"58px",
+                    width:"54px",
+                    left: "-450px",
+                    zIndex: 1000,
+                  }
+              }
+              onClick={closeDialog}
+            >
+              <span className="ri-close-line "></span>
+            </button>
+          </div>
+
+          <div
+            style={{
+              padding: "0 20px 120px 20px",
+              overflowY: "auto",
+            }}
+          >
+            <div className={classes.formContainer}>
+              <div className={classes.formGroup}>
+                {state.isLoading && state.isEditMode ? (
+                  <>
+                    <GenericSkeleton
+                      variant={"rect"}
+                      width={"40%"}
+                      height={"16px"}
+                      style={{ borderRadius: "4px", marginBottom: "8px" }}
+                      rootStyle={{ flex: 'none' }}
+                    />
+                    <GenericSkeleton
+                      variant={"rect"}
+                      width={"100%"}
+                      height={"46px"}
+                      style={{ borderRadius: "4px" }}
+                      rootStyle={{ flex: 'none' }}
+                    />
+                  </>
+                ) : (
+                  <Input
+                    type="text"
+                    label="Virtual Machine Group Name"
+                    placeholder="Enter Name"
+                    name="virtual_group_name"
+                    mandatorySign
+                    data={state.data}
+                    error={state.error}
+                    info={
+                      "In Buildpiper, for a monolithic application, you can onboard a single VM or a group of VMs, referred to as a VM Group."
+                    }
+
+                    onChangeHandler={commonFunctions.onChangeHandlerSmallInput}
+                    style={{ height: "46px" }}
+                  />
+                )}
+              </div>
+
+              <div className={classes.formGroup}>
+                {state.isLoading && state.isEditMode ? (
+                  <>
+                    <GenericSkeleton
+                      variant={"rect"}
+                      width={"40%"}
+                      height={"16px"}
+                      style={{ borderRadius: "4px", marginBottom: "8px" }}
+                      rootStyle={{ flex: 'none' }}
+                    />
+                    <GenericSkeleton
+                      variant={"rect"}
+                      width={"100%"}
+                      height={"46px"}
+                      style={{ borderRadius: "4px" }}
+                      rootStyle={{ flex: 'none' }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <MasterEnvDropdown
+                      envTabList={[]}
+                      selectedMasterEnv={state.selectedMasterEnv}
+                      selectedEnvTab={state.selected_env_master_id}
+                      envChangeHandler={updateSelectedMasterEnv}
+                      masterEnvList={state.master_envs_list}
+                      selectedComponentEnv={state.selected_component_env_taborder}
+                      masterEnvChangeHandler={updateMasterEnv}
+                      removeFromList={removeMasterEnv}
+                      error={state?.error?.selectedMasterEnv ? true : false}
+                      style={{ marginTop: "5px" }}
+                    />
+                    {state?.error?.selectedMasterEnv && (
+                      <p className="error-message">
+                        {state.error.selectedMasterEnv}
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             </div>
+          </div>
 
-        }
+          <div className="footer-right-panel d-flex align-center justify-end ">
+            <Button className="font-weight-600 font-12" variant="ghost" onClick={closeDialog}>
+              CANCEL
+            </Button>
+            <Button
+              className="btn btn-primary"
+              isLoading={state.isSaving}
+              onClick={validateAndSave}
+            >
+              {state.isEditMode ? "UPDATE" : "SAVE & CONTINUE"}
+            </Button>
+          </div>
+        </div>
       </div>
-    </>
+    </Dialog>
   );
-}
-PaginationTwo.propTypes = {
-  disable_go_to_page_number: PropTypes.bool,    
-  current_page_count: PropTypes.number,        
-  next: PropTypes.string,
-  on_next_click: PropTypes.func,
-  previous: PropTypes.string,
-  on_previous_click: PropTypes.func,
-  total_count: PropTypes.number,
-  on_pageNumber_click: PropTypes.func,
-  count: PropTypes.number,
 };
 
-PaginationTwo.defaultProps = {
-  disable_go_to_page_number: false,
-  current_page_count: 1,
-  next: null,
-  on_next_click: null,
-  previous: null,
-  on_previous_click: null,
-  total_count: 0,
-  on_pageNumber_click: null,
-  count: 0,
-};
+const useStyles = makeStyles((theme) => ({
+  root: {
+    "&.dialog-align-corner": {
+      "& .MuiPaper-root": {
+        maxWidth: "1100px",
+        margin: "0",
+        fontFamily: "Montserrat",
+      },
+    },
+    "& .right-panel-dialog": {
+      position: "relative",
+      width: "650px",
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+    },
+    "& .left-panel-dialog": {
+      width: "396px",
+      transition: "width 0.3s",
+      "& .left-panel-header": {
+        borderBottom: "1px solid #f1f1f1",
+        fontSize: "12px",
+        fontWeight: "600",
+        color: "#0086FF",
+      },
+      "& .checkbox-only-divi": {
+        position: "absolute",
+        bottom: "10px",
+        backcolor: "#fff",
+      },
+    },
+
+    "& .left-panel-dialog-down": {
+      width: "0px",
+      overflow: "hidden",
+      transition: "width 0.3s",
+    },
+    "& .footer-right-panel": {
+      padding: "20px",
+      position: "absolute",
+      bottom: "0px",
+      width: "650px",
+      gap: "13px",
+    },
+    "& .wrapper-new-file": {
+      "& .input-file-wraper": {
+        border: "none",
+        padding: "4px",
+        gap: "0px",
+        justifyContent: "center",
+      },
+    },
+  },
+
+  formContainer: {
+    width: "100%",
+    marginTop: "30px",
+  },
+  formGroup: {
+    marginBottom: "20px",
+    fontSize: "14px",
+  },
+}));
+
+export default AddVirtualMachineDialog;
