@@ -8,6 +8,7 @@ import InvokeApi from '../../../../util/apiInvoker';
 import { showErrorHandlerUpdated } from '../../../../util/util';
 import { Loading } from '../../../utils/Loading';
 import LinearProgress from '@mui/material/LinearProgress';
+import GenericSkeleton from '../../../../components/genericComponents/Skeletons/GenericSkeleton';
 
 const VMSetHealthDialog = ({ isActive, ...props }) => {
     const classes = useStyles();
