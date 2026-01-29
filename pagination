@@ -1,0 +1,300 @@
+import React, { useEffect, useState } from 'react';
+import { makeStyles, usePagination } from './ui/index';
+import { Input } from './genericComponents/Input';
+import { getLimitFromUrl } from '../util/util';
+
+import PropTypes from 'prop-types';
+import { useCustomSnackbar } from '../contexts/SnackbarContext';
+
+const useStyles = makeStyles({
+  ul: {
+    listStyle: 'none',
+    padding: 0,
+    margin: 0,
+    display: 'flex',
+    '& .btn-selected': {
+      border: '1px solid #DFEDFF !important',
+      backgroundColor: '#F5FAFF !important',
+      padding: '10px',
+      borderRadius: '8px',
+      fontSize: '14px',
+      fontWeight: '600!important',
+      color: '#2f2f2f',
+      lineHeight: '1.2'
+    },
+    '& .btn-transparent': {
+      padding: '10px',
+      margin: '0px!important',
+      fontSize: '14px',
+      fontWeight: '600!important',
+      border: '1px solid transparent',
+      lineHeight: '1.2'
+    }
+  },
+});
+
+export default function PaginationTwo(props) {
+  const classes = useStyles();
+  const { showSnackbar } = useCustomSnackbar();
+  const disable_go_to_page_number = props.disable_go_to_page_number ? props.disable_go_to_page_number : null;
+  const current_page_count = props.current_page_count;
+  const [limit, setLimit] = useState(10);
+  const [state, setState] = useState({
+    data: {
+      page_number: current_page_count ? current_page_count : 1,
+      go_page_number: current_page_count ? current_page_count : 1,
+    },
+    error: {}
+  });
+
+  const { next, on_next_click, previous, on_previous_click, total_count, on_pageNumber_click, count = 0 } = props;
+
+  const offset = (state.data.page_number - 1) * limit;
+  const start = (state.data.page_number - 1) * limit + 1;
+
+  const end = Math.min(state.data.page_number * limit, Number(count));
+ 
+  const { items } = usePagination({
+    count: total_count,
+    page: state.data.page_number,
+    onChange: (event, page) => handlePageNumberClick(page),
+  });
+
+  useEffect(() => {
+    if (next) {
+      setLimit(getLimitFromUrl(next));
+    } else if (previous) {
+      setLimit(getLimitFromUrl(previous));
+    }
+  }, [next, previous]);
+
+  const handleNextClick = () => {
+    const nextPage = state.data.page_number + 1;
+    if (on_next_click && typeof on_next_click === 'function') {
+      on_next_click(nextPage);
+    }
+    setState(prevState => ({
+      ...prevState,
+      data: { ...prevState.data, page_number: nextPage, go_page_number: nextPage }
+    }));
+  };
+
+  const handlePreviousClick = () => {
+    const previousPage = state.data.page_number - 1;
+    if (on_previous_click && typeof on_previous_click === 'function') {
+      on_previous_click(previousPage);
+    }
+    setState(prevState => ({
+      ...prevState,
+      data: { ...prevState.data, page_number: previousPage, go_page_number: previousPage }
+    }));
+  };
+
+  const handlePageNumberClick = (page) => {
+    if (on_pageNumber_click && typeof on_pageNumber_click === 'function') {
+      on_pageNumber_click(page);
+    }
+    setState(prevState => ({
+      ...prevState,
+      data: { ...prevState.data, page_number: page, go_page_number: page }
+    }));
+  };
+
+  const handlePageNumberInput = (event) => {
+    const value = event.target.value;
+    setState(prevState => ({
+      ...prevState,
+      data: {
+        ...prevState.data,
+        go_page_number: value,
+      },
+    }));
+  };
+
+  const showInvalidPageSnackbar = (page_number) => {
+    showSnackbar(
+      "error",
+      "Invalid Page Number",
+      `Please enter a valid page number between 1 and ${total_count}.`
+    );
+  };
+
+  const onKeyEnter = e => {
+    let page_number = Number(state.data.go_page_number);
+    if (e.key === "Enter") {
+      if (page_number > 0 && page_number <= total_count) {
+        handlePageNumberClick(page_number);
+      } else {
+        showInvalidPageSnackbar(page_number);
+      }
+    }
+  };
+
+  const goToPageNumber = () => {
+    const page_number = Number(state.data.go_page_number);
+    if (page_number > 0 && page_number <= total_count) {
+      handlePageNumberClick(page_number);
+    } else {
+      showInvalidPageSnackbar(page_number);
+    }
+  };
+
+  return (
+    <>
+      <div className='d-grid space-between align-center' style={disable_go_to_page_number ? { gridTemplateColumns: '1fr 1fr', width: '100%', gap: '10px' } : { gridTemplateColumns: '1fr 1fr 350px', width: '100%', gap: '10px' }}>
+        <nav>
+          <ul className={classes.ul}>
+            {items.map(({ page, type, selected,disabled, ...item }, index) => {
+              let children = null;
+
+              if (type === 'start-ellipsis' || type === 'end-ellipsis') {
+                children = <button className='btn btn-transparent' style={{ paddingLeft: '0px', paddingRight: '0px' }}>…</button>;
+              } else if (type === 'page') {
+                children = (
+                  <button
+                    type="button"
+                    className={selected ? 'btn-selected' : 'btn btn-transparent'}
+                    style={selected ? { border: '1px solid #DFEDFF', backgroundColor: '#F5FAFF' } : undefined}
+                    onClick={() => handlePageNumberClick(page)}
+                    {...item}
+                  >
+<<<<<<< Updated upstream
+                  <span className="ri-arrow-left-s-line"></span>
+                </button>
+              );
+            } else if (type === 'next') {
+              children = (
+                <button
+                  type="button"
+                  className='btn btn-transparent'
+                  onClick={handleNextClick}
+                  disabled={disabled}
+                  >
+                  <span className="ri-arrow-right-s-line"></span>
+                </button>
+              );
+            } else {
+              children = (
+                <button
+                  className='btn btn-transparent'
+                  type="button"
+                  {...item}>
+                  {type}
+                </button>
+              );
+            }
+            return <li key={index}>{children}</li>;
+          })}
+        </ul>
+      </nav>
+      <p className={`${!disable_go_to_page_number ? "font-14 font-weight-600 text-center" : "font-14 font-weight-600 text-right"}`}  >
+        <span className='color-primary'>{start + " - " + end} </span><span className='color-tertiary'>&nbsp;of {count}</span>
+      </p>
+      {
+        !disable_go_to_page_number &&
+          <div className='d-flex align-center space-between'>
+            <p className='font-14 font-weight-500'>Go to Page Number:</p>
+            <div className='input-mb-0 d-grid' style={{ gridTemplateColumns: '100px 82px', gap: '5px' }}>
+              <Input
+                name="go_page_number"
+                varient="handle-keys"
+                type="number"
+                placeholder=""
+                data={state.data}
+                error={state.error}
+                onChangeHandler={handlePageNumberInput}
+                onKeyPress={onKeyEnter}
+              />
+              <button className='btn btn-pagintaion mr-0 font-14' onClick={goToPageNumber}>Go</button>
+=======
+                    {page}
+                  </button>
+                );
+              } else if (type === 'previous') {
+                children = (
+                  <button
+                    type="button"
+                    className='btn btn-transparent'
+                    onClick={handlePreviousClick}
+                    disabled={disabled}
+                    >
+                    <span className="ri-arrow-left-s-line"></span>
+                  </button>
+                );
+              } else if (type === 'next') {
+                children = (
+                  <button
+                    type="button"
+                    className='btn btn-transparent'
+                    onClick={handleNextClick}
+                    disabled={disabled}
+                    >
+                    <span className="ri-arrow-right-s-line"></span>
+                  </button>
+                );
+              } else {
+                children = (
+                  <button
+                    className='btn btn-transparent'
+                    type="button"
+                    {...item}>
+                    {type}
+                  </button>
+                );
+              }
+              return <li key={index}>{children}</li>;
+            })}
+          </ul>
+        </nav>
+        <p className={`${!disable_go_to_page_number ? "font-14 font-weight-600 text-center" : "font-14 font-weight-600 text-right"}`}  >
+          <span className='color-primary'>{start + " - " + end} </span><span className='color-tertiary'>&nbsp;of {count}</span>
+        </p>
+        {
+          !disable_go_to_page_number &&
+            <div className='d-flex align-center space-between'>
+              <p className='font-14 font-weight-500'>Go to Page Number:</p>
+              <div className='input-mb-0 d-grid' style={{ gridTemplateColumns: '100px 82px', gap: '5px' }}>
+                <Input
+                  name="go_page_number"
+                  varient="handle-keys"
+                  type="number"
+                  placeholder= "enter no" className="color-tertiary font-14 font-weight-400"
+                  data={state.data}
+                  error={state.error}
+                  
+                  onChangeHandler={handlePageNumberInput}
+                  onKeyPress={onKeyEnter}
+                />
+                <button className='btn btn-pagintaion mr-0 font-14' onClick={goToPageNumber}>Go</button>
+              </div>
+>>>>>>> Stashed changes
+            </div>
+
+        }
+      </div>
+    </>
+  );
+}
+PaginationTwo.propTypes = {
+  disable_go_to_page_number: PropTypes.bool,    
+  current_page_count: PropTypes.number,        
+  next: PropTypes.string,
+  on_next_click: PropTypes.func,
+  previous: PropTypes.string,
+  on_previous_click: PropTypes.func,
+  total_count: PropTypes.number,
+  on_pageNumber_click: PropTypes.func,
+  count: PropTypes.number,
+};
+
+PaginationTwo.defaultProps = {
+  disable_go_to_page_number: false,
+  current_page_count: 1,
+  next: null,
+  on_next_click: null,
+  previous: null,
+  on_previous_click: null,
+  total_count: 0,
+  on_pageNumber_click: null,
+  count: 0,
+};
