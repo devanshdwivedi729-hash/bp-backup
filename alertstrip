@@ -1,15 +1,273 @@
-import React from 'react'
-import Chip from '../components/chip/Chip'
+import React, { useEffect, useState } from 'react';
+import { IconButton, Tooltip } from '@mui/material';
+import Chip from '../../components/chip/Chip';
+import GenerateURL from '../../util/APIUrlProvider';
+import InvokeApi from '../../util/apiInvoker';
+import properties from '../../properties/properties';
+import { IsSuperUser } from '../../util/security';
+import NewChip from '../../components/newChip/NewChip';
+import { makeStyles } from '@mui/styles';
+
+const useStyles = makeStyles(() => ({
+  licenseStrip: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    color: '#FFFFFF',
+    padding: '10.5px',
+  },
+
+  licenseLeft: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: '10px',
+  },
+
+  licenseMessage: {
+    fontSize: '12px',
+    fontWeight: 600,
+  },
+
+  chipLabel: {
+    fontSize: '12px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    cursor: 'pointer',
+    color: '#000000',
+    padding: '2px 4px',
+  },
+
+  closeButton: {
+    padding: '4px',
+  },
+}));
 
 const LicenseAlertStrip = () => {
-  return (
-    <div className='d-flex align-center' style={{backgroundColor:"#407BCA",color:"#FFFFFF",padding:"10px",gap:"8px"}}>
-      <span className='ri-information-fill font-20' style={{color:"#FFFFFF"}}></span>
-          <span>Your Professional License is valid till 02-Sep-2023, Please Renew your plan</span>
-          <Chip label="Renew" variant='secondary' size='large' onClick={()=>{}} />
-          <span className="ri-close-line font-15"></span>
-    </div>
-  )
-}
+  const [state, setState] = useState({
+    showStrip: false,
+    daysLeft: null,
+    expiryDate: null,
+    licenseType: null,
+    loading: true,
+    isExpired: false,
+    error: false,
+  });
+  const classes = useStyles();
 
-export default LicenseAlertStrip
+  useEffect(() => {
+    if (!IsSuperUser()) {
+      setState((prev) => ({ ...prev, loading: false }));
+      return;
+    }
+
+    const closedTimestamp = localStorage.getItem('license_banner_closed');
+    if (closedTimestamp) {
+      const hoursSinceClosed = (Date.now() - parseInt(closedTimestamp)) / (1000 * 60 * 60);
+      if (hoursSinceClosed < 24) {
+        setState((prev) => ({ ...prev, loading: false, showStrip: false }));
+        return;
+      }
+    }
+
+    const cachedLicense = localStorage.getItem('license_data');
+
+    if (cachedLicense) {
+      try {
+        const parsed = JSON.parse(cachedLicense);
+        handleLicenseSuccess(parsed);
+      } catch (error) {
+        console.error('Error parsing cached license data:', error);
+        fetchLicenseData();
+      }
+    } else {
+      fetchLicenseData();
+    }
+  }, []);
+
+  function fetchLicenseData() {
+    var requestInfo = {
+      endPoint: GenerateURL({}, properties.api.license_details),
+      httpMethod: 'GET',
+      httpHeaders: { 'Content-Type': 'application/json' },
+    };
+    InvokeApi(requestInfo, handleLicenseSuccess, handleLicenseError);
+  }
+
+  function handleLicenseSuccess(response) {
+    console.log('License Data:', response);
+    const expiryDate = response?.License_end_date;
+    const licenseType = response?.License_Type;
+    var license_data = response;
+    license_data = {...response, License_end_date: expiryDate}
+
+
+    console.log(license_data,'license_data_00p')
+    localStorage.setItem('license_data', JSON.stringify(license_data));
+
+    if (expiryDate) {
+      const daysLeft = calculateDaysLeft(expiryDate);
+      const isExpired = daysLeft <= 0;
+      
+      // setState({
+      //   showStrip: daysLeft <= 30,
+      //   daysLeft,
+      //   expiryDate,
+      //   licenseType,
+      //   loading: false,
+      //   isExpired,
+      //   error: false,
+      // });
+
+      setState({
+        showStrip: true,
+        daysLeft,
+        expiryDate,
+        licenseType,
+        loading: false,
+        isExpired,
+        error: false,
+      });
+    } else {
+      console.warn('License_end_date not found in response');
+      setState((prev) => ({ ...prev, loading: false, error: true }));
+    }
+  }
+
+  function handleLicenseError(error) {
+    console.error('Error fetching license data:', error);
+    setState((prev) => ({ 
+      ...prev, 
+      loading: false, 
+      error: true,
+      showStrip: false 
+    }));
+  }
+
+  function calculateDaysLeft(expiryDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const expiry = new Date(expiryDate);
+    expiry.setHours(0, 0, 0, 0);
+
+    const timeDiff = expiry.getTime() - today.getTime();
+    const daysLeft = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    console.log('Days left until expiry:', daysLeft);
+    return daysLeft;
+  }
+
+  function getBackgroundColor() {
+    if (state.isExpired || state.daysLeft <= 7) {
+      return '#E53737'; 
+    } else if (state.daysLeft <= 15) {
+      return '#E1941D'; 
+    } else {
+      return '#407BCA'; 
+    }
+  }
+
+  const getIconClass = () => {
+    if (state.isExpired || state.daysLeft <= 7) return 'ri-spam-fill font-18';
+    if (state.daysLeft <= 15) return 'ri-alert-fill font-18';
+    return 'ri-information-fill font-18';
+  };
+
+  function formatExpiryDate() {
+    if (!state.expiryDate) return '';
+    
+    const date = new Date(state.expiryDate);
+    const day = date.getDate();
+    const month = date.toLocaleString('en-US', { month: 'short' });
+    const year = date.getFullYear();
+    
+    return `${day} ${month} ${year}`;
+  }
+
+  function getLicenseMessage() {
+    if (state.isExpired) {
+      return `Your Professional License has expired on ${formatExpiryDate()}. Please Renew your plan`;
+    }
+    return `Your Professional License is valid till ${formatExpiryDate()}. Please Renew your plan`;
+  }
+
+  function handleClose() {
+    localStorage.setItem('license_banner_closed', Date.now().toString());
+    setState((prev) => ({ ...prev, showStrip: false }));
+  }
+
+  // function handleRenew() {
+  //   alert('Renew clicked');
+  //   // window.location.href = '/settings/license';
+  // }
+
+  if (!IsSuperUser() || !state.showStrip || state.loading) {
+    return null;
+  } 
+
+  return (
+    <div
+  className={classes.licenseStrip}
+  style={{ backgroundColor: getBackgroundColor() }} 
+    >
+
+      <div className={classes.licenseLeft}>
+       <div>
+         <Tooltip title="Renew your license" arrow>
+          <span className={getIconClass()}></span>
+         </Tooltip>
+       </div>
+        <div>
+          <span className={classes.licenseMessage}>
+  {getLicenseMessage()}
+</span>
+
+        </div>
+        <div >
+        <NewChip
+  label={
+    <span className={classes.chipLabel}>
+      {state.isExpired
+        ? 'Expired'
+        : `${state.daysLeft} ${
+            state.daysLeft === 1 ? 'day' : 'days'
+          } left`}
+    </span>
+  }
+  variant="light"
+  size="large"
+  shape="standard"
+  // onClick={handleRenew}
+/>
+        </div>
+        {/* <div style={{
+            backgroundColor: '#FEA111',
+            padding: '8px 16px 8px 12px',
+            borderRadius: '4px',
+            color: '#fff',
+            gap: '8px',
+            fontSize: '12px',
+            fontWeight: '600',
+            cursor: 'pointer',
+          }}>
+            <span className='ri-vip-crown-line font-20'></span>
+            <span className="font-12">MANAGE PLAN</span>
+        </div> */}
+      </div>
+
+<IconButton
+  onClick={handleClose}
+  className={classes.closeButton}
+  aria-label="close"
+>
+  <span className="ri-close-line font-15 color-white"></span>
+</IconButton>
+
+    </div>
+  );
+};
+
+export default LicenseAlertStrip;
