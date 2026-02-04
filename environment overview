@@ -129,24 +129,32 @@ const EnvironmentOverview = () => {
 
   const getServiceTypeColor = (type) => {
     const colors = {
-      'Mobile Based': '#E91E63',
-      'Virtual Machine Based': '#00BCD4',
-      'Microservice Based': '#4CAF50'
+              'Mobile Based': '#EF5DBD',
+              'Virtual Machine Based': '#0086FF',
+              'Microservice Based': '#2EBE79'
+    }
+    return colors[type] || '#757575'
+  }
+          const getServiceTypeBorderColor = (type) => {
+    const colors = {
+              'Mobile Based': '#FFDAF2',
+              'Virtual Machine Based': '#DFEDFF',
+              'Microservice Based': '#CFE7DB'
     }
     return colors[type] || '#757575'
   }
 
   const getServiceTypebackgroundColor = (type) => {
     const backgroundColors = {
-      'Mobile Based': '#e7a5bbff',
-      'Virtual Machine Based': '#b7ecf3ff',
-      'Microservice Based': '#a8f1abff'
+              'Mobile Based': '#FFEDF9',
+              'Virtual Machine Based': '#F5FAFF',
+              'Microservice Based': '#E6FBEA'
     }
     return backgroundColors[type] || '#757575'
   }
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div style={{ padding: '20px',backgroundColor:"#ffffff" }}>
       <PageHeader
         heading='Application Report'
         icon='ri-apps-line'
@@ -205,7 +213,7 @@ const EnvironmentOverview = () => {
       <Box sx={{ 
         marginTop: '30px',
         border: '1px solid #E0E0E0',
-        borderRadius: '4px',
+        borderRadius: '12px',
         overflow: 'hidden'
       }}>
         <Box sx={{ 
@@ -232,27 +240,27 @@ const EnvironmentOverview = () => {
             borderRight: '1px solid #E0E0E0',
             backgroundColor: '#FAFAFA'
           }}>
-                                                    <Box
-                                                              sx={{
-                                                                        padding: '16px',
-                                                                        backgroundColor: '#FAFAFA',
-                                                                        borderBottom: '1px solid #E0E0E0',
-                                                                        height: '35px',
-                                                              }}
-                                                    >
-                                                             
-                                                    </Box>
+           <Box
+           sx={{
+           padding: '16px',
+           backgroundColor: '#FAFAFA',
+           borderBottom: '1px solid #E0E0E0',
+           height: '35px',
+           }}
+           >
+          </Box>
             <Box sx={{
               padding: '16px',
               borderBottom: '1px solid #E0E0E0',
-              height: '60px',
+              height: '35px',
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: '#FFFFFF'
+              backgroundColor: '#FAFAFA'
             }}>
               <Typography sx={{ 
                 fontFamily: 'Montserrat', 
-                fontSize: '14px',
+                fontSize: '12px',
+                fosStyle:'semibold',
                 fontWeight: 600,
                 color: '#000000'
               }}>
@@ -270,21 +278,27 @@ const EnvironmentOverview = () => {
                   alignItems: 'flex-start',
                   gap: '12px',
                   minHeight: '120px',
-                  backgroundColor: '#FAFAFA'
+                  backgroundColor: '#FFFFFF'
                 }}
               >
-                <span className="ri-settings-3-line" style={{ 
-                  fontSize: '24px', 
-                  color: '#0086FF',
-                  flexShrink: 0
+                <Box sx={{
+                 backgroundColor: '#EBF5FF',
+                 padding: '3px 6px',
+                 borderRadius: '6.75px',
+                 gap:'11.25px'
+                }}>
+                <span className="ri-settings-3-line" style={{
+                fontSize: '24px',
+                color: '#0086FF',
                 }}></span>
+                </Box>
                 <Box>
                   <Typography sx={{ 
                     fontFamily: 'Montserrat', 
-                    fontSize: '14px',
+                    fontSize: '12px',
                     fontWeight: 600,
-                    marginBottom: '8px',
-                    color: '#000000'
+                    marginBottom: '1px',
+                    color: '#2F2F2F'
                   }}>
                     {service.serviceName}
                   </Typography>
@@ -292,9 +306,12 @@ const EnvironmentOverview = () => {
                     fontFamily: 'Montserrat', 
                     fontSize: '12px',
                     fontWeight: 600,
+                    fontStyle:'semibold',
+                    border: "1px solid",
                     borderRadius: '4px',
-                    padding: '4px 8px',
+                    padding: '2px 4px',
                     display: 'inline-block',
+                    borderColor: getServiceTypeBorderColor(service.serviceType),
                     backgroundColor: getServiceTypebackgroundColor(service.serviceType),
                     color: getServiceTypeColor(service.serviceType)
                   }}>
@@ -318,8 +335,9 @@ const EnvironmentOverview = () => {
                 }}>
                   <Typography sx={{ 
                     fontFamily: 'Montserrat', 
-                    fontSize: '14px',
-                    fontWeight: 600,
+                    fontSize: '12px',
+                    fontStyle:'extrabold',
+                    fontWeight: 800,
                     color: '#0086FF'
                   }}>
                     {envGroup.parent}
@@ -330,13 +348,16 @@ const EnvironmentOverview = () => {
                   display: 'grid',
                   gridTemplateColumns: `repeat(${envGroup.children.length}, 1fr)`,
                   borderBottom: '1px solid #E0E0E0',
-                  height: '60px'
+                  height: '35px'
                 }}>
                   {envGroup.children.map((subEnv, idx) => (
                     <Box 
                       key={subEnv}
                       sx={{
-                        padding: '16px',
+                        paddingX: '16px',
+                        paddingY: '0px',
+                        fontSize: '12px',
+                        fontWeight: '600',
                         backgroundColor: '#F5FAFF',
                         borderRight: '1px solid #E0E0E0' ,
                         display: 'flex',
@@ -347,7 +368,7 @@ const EnvironmentOverview = () => {
                         fontFamily: 'Montserrat', 
                         fontSize: '12px',
                         fontWeight: 600,
-                        color: '#000000'
+                        color: '#2F2F2F'
                       }}>
                         {subEnv}
                       </Typography>
