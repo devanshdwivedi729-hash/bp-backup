@@ -1,0 +1,422 @@
+import React from 'react'
+import PageHeader from '../../../../components/PageHeader'
+import { Grid, Box, Typography, Chip } from '@mui/material'
+import AdvanceSearchFilterCombo from '../../../../components/genericComponents/AdvanceSearchFilter/AdvanceSearchFilterCombo'
+import DeploymentInfoCard from './DeploymentInfoCard'
+
+const EnvironmentOverview = () => {
+  const [state, setState] = React.useState({
+    count: 0,
+    moreAdvFilterList: [],
+    applicationName: 'App_new_24',
+    environments: [
+      { parent: 'Dev', children: ['Dev_Sub1', 'Dev_Sub2', 'Dev_Sub3'] }
+    ],
+    services: []
+  })
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        //  API call
+        const mockData = [
+          {
+            id: 1,
+            serviceName: 'Service 1',
+            serviceType: 'Mobile Based',
+            deployments: {
+              Dev_Sub1: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ],
+              Dev_Sub2: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ],
+              Dev_Sub3: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ]
+            }
+          },
+          {
+            id: 2,
+            serviceName: 'Service 1',
+            serviceType: 'Virtual Machine Based',
+            deployments: {
+              Dev_Sub1: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ],
+              Dev_Sub2: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ],
+              Dev_Sub3: []
+            }
+          },
+          {
+            id: 3,
+            serviceName: 'Service 1',
+            serviceType: 'Microservice Based',
+            deployments: {
+              Dev_Sub1: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ],
+              Dev_Sub2: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ],
+              Dev_Sub3: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ]
+            }
+          },
+          {
+            id: 4,
+            serviceName: 'Service 1',
+            serviceType: 'Virtual Machine Based',
+            deployments: {
+              Dev_Sub1: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ],
+              Dev_Sub2: [],
+              Dev_Sub3: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ]
+            }
+          },
+          {
+            id: 5,
+            serviceName: 'Service 1',
+            serviceType: 'Microservice Based',
+            deployments: {
+              Dev_Sub1: [
+                { deploymentName: 'Dev/Dev_Sub1/Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' },
+                { deploymentName: 'Dev/Dev_Sub1/Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ],
+              Dev_Sub2: [],
+              Dev_Sub3: [
+                { deploymentName: 'Deploymentname1', tag: '78-2024-11-27-181547', date: '28-Aug-2025' }
+              ]
+            }
+          }
+        ]
+        
+        setState(prev => ({ ...prev, services: mockData }))
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      }
+    }
+    
+    fetchData()
+  }, [])
+
+  const resetAdvFilter = () => {
+    setState(prev => ({
+      ...prev,
+      count: 0,
+      moreAdvFilterList: []
+    }))
+  }
+
+  const getServiceTypeColor = (type) => {
+    const colors = {
+      'Mobile Based': '#E91E63',
+      'Virtual Machine Based': '#00BCD4',
+      'Microservice Based': '#4CAF50'
+    }
+    return colors[type] || '#757575'
+  }
+
+  const getServiceTypebackgroundColor = (type) => {
+    const backgroundColors = {
+      'Mobile Based': '#e7a5bbff',
+      'Virtual Machine Based': '#b7ecf3ff',
+      'Microservice Based': '#a8f1abff'
+    }
+    return backgroundColors[type] || '#757575'
+  }
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <PageHeader
+        heading='Application Report'
+        icon='ri-apps-line'
+        primaryButton={null}
+      />
+
+      {state.count !== 0 || true ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "70% 30%",
+            marginBottom: "0px",
+            width: '100%',
+            padding: "0px",
+            marginTop: '20px'
+          }}>
+          <Grid container>
+            {state.moreAdvFilterList?.map((filterName) => {
+              return (
+                <div key={filterName} className="ad-more-search mb-20">
+                  <AdvanceSearchFilterCombo
+                    filterName={filterName}
+                  />
+                </div>
+              )
+            })}
+            <div className="ad-more-search mb-20">
+              <AdvanceSearchFilterCombo
+                reset={state.resetCount}
+                autoClosedAfterSelection={true}
+                variant='more-button'
+                uniqueId='more-button-adv-0'
+              />
+            </div>
+
+            <div 
+              onKeyDown={() => { }} 
+              onClick={resetAdvFilter} 
+              className="pl-15 ml-20 d-flex align-center justify-center cursor-pointer" 
+              style={{ 
+                borderLeft: '1px solid #dedede', 
+                height: '40px', 
+                color: "#0086FF", 
+                gap: "5px" 
+              }} 
+              tabIndex={0} 
+              role="button"
+            >
+              <span className='ri-filter-3-line font-20 cursor-pointer'></span>
+              <span>Clear Filters</span>
+            </div>
+          </Grid>
+        </div>
+      ) : null}
+
+      <Box sx={{ 
+        marginTop: '30px',
+        border: '1px solid #E0E0E0',
+        borderRadius: '4px',
+        overflow: 'hidden'
+      }}>
+        <Box sx={{ 
+          padding: '10px 20px',
+          backgroundColor: '#FAFAFA',
+          borderBottom: '1px solid #E0E0E0'
+        }}>
+          <Typography sx={{ 
+            fontFamily: 'Montserrat', 
+            fontSize: '14px',
+            fontWeight: 600,
+            color: '#000000'
+          }}>
+            Application : {state.applicationName}
+          </Typography>
+        </Box>
+
+        <Box sx={{ 
+          display: 'grid',
+          gridTemplateColumns: '250px 1fr',
+          minHeight: '400px'
+        }}>
+          <Box sx={{
+            borderRight: '1px solid #E0E0E0',
+            backgroundColor: '#FAFAFA'
+          }}>
+                                                    <Box
+                                                              sx={{
+                                                                        padding: '16px',
+                                                                        backgroundColor: '#FAFAFA',
+                                                                        borderBottom: '1px solid #E0E0E0',
+                                                                        height: '35px',
+                                                              }}
+                                                    >
+                                                             
+                                                    </Box>
+            <Box sx={{
+              padding: '16px',
+              borderBottom: '1px solid #E0E0E0',
+              height: '60px',
+              display: 'flex',
+              alignItems: 'center',
+              backgroundColor: '#FFFFFF'
+            }}>
+              <Typography sx={{ 
+                fontFamily: 'Montserrat', 
+                fontSize: '14px',
+                fontWeight: 600,
+                color: '#000000'
+              }}>
+                Services
+              </Typography>
+            </Box>
+
+            {state.services.map((service) => (
+              <Box 
+                key={service.id}
+                sx={{
+                  padding: '16px',
+                  borderBottom: '1px solid #E0E0E0',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  minHeight: '120px',
+                  backgroundColor: '#FAFAFA'
+                }}
+              >
+                <span className="ri-settings-3-line" style={{ 
+                  fontSize: '24px', 
+                  color: '#0086FF',
+                  flexShrink: 0
+                }}></span>
+                <Box>
+                  <Typography sx={{ 
+                    fontFamily: 'Montserrat', 
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    marginBottom: '8px',
+                    color: '#000000'
+                  }}>
+                    {service.serviceName}
+                  </Typography>
+                  <Typography sx={{ 
+                    fontFamily: 'Montserrat', 
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    borderRadius: '4px',
+                    padding: '4px 8px',
+                    display: 'inline-block',
+                    backgroundColor: getServiceTypebackgroundColor(service.serviceType),
+                    color: getServiceTypeColor(service.serviceType)
+                  }}>
+                    {service.serviceType}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+
+          <Box>
+            {state.environments.map((envGroup, groupIdx) => (
+              <Box key={groupIdx}>
+                <Box sx={{
+                  padding: '16px',
+                  backgroundColor: '#F5FAFF',
+                  borderBottom: '1px solid #E0E0E0',
+                  height: '35px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}>
+                  <Typography sx={{ 
+                    fontFamily: 'Montserrat', 
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: '#0086FF'
+                  }}>
+                    {envGroup.parent}
+                  </Typography>
+                </Box>
+
+                <Box sx={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${envGroup.children.length}, 1fr)`,
+                  borderBottom: '1px solid #E0E0E0',
+                  height: '60px'
+                }}>
+                  {envGroup.children.map((subEnv, idx) => (
+                    <Box 
+                      key={subEnv}
+                      sx={{
+                        padding: '16px',
+                        backgroundColor: '#F5FAFF',
+                        borderRight: '1px solid #E0E0E0' ,
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Typography sx={{ 
+                        fontFamily: 'Montserrat', 
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#000000'
+                      }}>
+                        {subEnv}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+
+                {/* Deployment Cards Rows */}
+                {/* {state.services.map((service) => (
+                  <Box 
+                    key={service.id}
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${envGroup.children.length}, 1fr)`,
+                      borderBottom: '1px solid #E0E0E0',
+                      minHeight: '120px'
+                    }}
+                  >
+                    {envGroup.children.map((subEnv, idx) => (
+                      <Box 
+                        key={subEnv}
+                        sx={{
+                          padding: '12px',
+                          backgroundColor: '#FFFFFF',
+                          borderRight: idx < envGroup.children.length - 1 ? '1px solid #E0E0E0' : 'none'
+                        }}
+                      >
+                        <Box sx={{ 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: '8px' 
+                        }}>
+                          {service.deployments[subEnv]?.map((deployment, deployIdx) => (
+                            <Box key={deployIdx} sx={{ position: 'relative' }}>
+                              {service.id === 1 && subEnv === 'Dev_Sub2' && deployIdx === 2 && (
+                                <Chip
+                                  label="Multiple"
+                                  size="small"
+                                  sx={{
+                                    position: 'absolute',
+                                    top: '4px',
+                                    right: '4px',
+                                    backgroundColor: '#FFFFFF',
+                                    border: '1px solid #E0E0E0',
+                                    fontSize: '10px',
+                                    height: '20px',
+                                    zIndex: 1
+                                  }}
+                                />
+                              )}
+                              <DeploymentInfoCard
+                                deploymentName={deployment.deploymentName}
+                                tag={deployment.tag}
+                                date={deployment.date}
+                              />
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                ))} */}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </Box>
+    </div>
+  )
+}
+
+export default EnvironmentOverview
