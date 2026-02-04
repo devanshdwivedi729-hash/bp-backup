@@ -1,0 +1,36 @@
+import React from "react";
+import { Box, Typography } from "@mui/material";
+
+const DeploymentInfoCard = ({ deploymentName, tag, date }) => {
+          return (
+                    <div
+                              style={{
+                                        font:"Montserrat",
+                                        letterSpacing:"0",
+                                        backgroundColor: "#EBF5FF",
+                                        borderRadius: "8px",
+                                        padding: "4px 8px",
+                                        width: "309px",
+                                        fontStyle:"semibold",
+                                        fontSize: "12px",
+                                        fonqtWeight: "600",
+                                        lineHeight:"150%",
+                                        gap:"8px"
+                              }}
+                    >
+                              <Typography variant="body1" >
+                                        Deployment name:  <strong>{deploymentName}</strong>
+                              </Typography>
+
+                              <Typography variant="body1" >
+                              Tag: <strong> {tag}</strong>
+                              </Typography>
+
+                              <Typography variant="body1">
+                                        Date: <strong>{date} </strong>
+                              </Typography>
+                    </div>
+          );
+};
+
+export default DeploymentInfoCard;
