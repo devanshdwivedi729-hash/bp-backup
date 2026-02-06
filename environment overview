@@ -1,11 +1,251 @@
 import { useEffect, useState } from 'react'
+import { makeStyles } from '@mui/styles'
 import PageHeader from '../../../../components/PageHeader'
 import { Grid, Typography, Chip } from '@mui/material'
 import AdvanceSearchFilterCombo from '../../../../components/genericComponents/AdvanceSearchFilter/AdvanceSearchFilterCombo'
 import DeploymentInfoCard from './DeploymentInfoCard'
 import GenericSkeleton from '../../../../components/genericComponents/Skeletons/GenericSkeleton'
 
+const useStyles = makeStyles(theme => ({
+  root: {
+    padding: '20px',
+    backgroundColor: '#ffffff'
+  },
+  filterContainer: {
+    display: 'grid',
+    gridTemplateColumns: '70% 30%',
+    marginBottom: '0px',
+    width: '100%',
+    padding: '0px',
+    marginTop: '20px'
+  },
+  advMoreSearch: {
+    marginBottom: '20px'
+  },
+  clearFilterButton: {
+    borderLeft: '1px solid #dedede',
+    height: '40px',
+    color: '#0086FF',
+    gap: '5px',
+    paddingLeft: '15px',
+    marginLeft: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer'
+  },
+  clearFilterIcon: {
+    fontSize: '20px',
+    cursor: 'pointer'
+  },
+  tableContainer: {
+    marginTop: '30px',
+    border: '1px solid #E0E0E0',
+    borderRadius: '12px',
+    overflow: 'scroll'
+  },
+  applicationHeader: {
+    padding: '10px 20px',
+    backgroundColor: '#FAFAFA',
+    borderBottom: '1px solid #E0E0E0'
+  },
+  applicationName: {
+    fontFamily: 'Montserrat',
+    fontSize: '14px',
+    fontWeight: 600,
+    color: '#000000'
+  },
+  gridContainer: {
+    display: 'grid',
+    gridTemplateColumns: '250px 1fr'
+  },
+  leftColumn: {
+    borderRight: '1px solid #E0E0E0',
+    borderLeft: '1px solid #E0E0E0',
+    overflowY: 'auto',
+    backgroundColor: '#FFFFFF',
+    overflowX: 'hidden'
+  },
+  emptyHeaderCell: {
+    height: '35px',
+    backgroundColor: '#FAFAFA',
+    borderBottom: '1px solid #E0E0E0'
+  },
+  servicesHeader: {
+    padding: '16px',
+    borderBottom: '1px solid #E0E0E0',
+    height: '35px',
+    display: 'flex',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA'
+  },
+  servicesHeaderText: {
+    fontFamily: 'Montserrat',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#000000'
+  },
+  serviceRow: {
+    padding: '16px',
+    borderBottom: '1px solid #E0E0E0',
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '12px',
+    backgroundColor: '#FFFFFF'
+  },
+  serviceIcon: {
+    backgroundColor: '#EBF5FF',
+    padding: '3px 6px',
+    borderRadius: '6.75px',
+    flexShrink: 0,
+    '& .ri-settings-3-line': {
+      fontSize: '24px',
+      color: '#0086FF'
+    }
+  },
+  serviceName: {
+    fontFamily: 'Montserrat',
+    fontSize: '12px',
+    fontWeight: 600,
+    marginBottom: '4px',
+    color: '#2F2F2F'
+  },
+  serviceType: {
+    fontFamily: 'Montserrat',
+    fontSize: '12px',
+    fontWeight: 600,
+    border: '1px solid',
+    borderRadius: '4px',
+    padding: '2px 4px',
+    display: 'inline-block'
+  },
+  rightColumn: {
+    overflowX: 'auto',
+    overflowY: 'auto'
+  },
+  rightColumnInner: {
+    display: 'inline-block',
+    minWidth: 'max-content'
+  },
+  environmentHeader: {
+    padding: '16px',
+    backgroundColor: '#F5FAFF',
+    borderBottom: '1px solid #E0E0E0',
+    height: '35px',
+    display: 'flex',
+    alignItems: 'center'
+  },
+  environmentHeaderText: {
+    fontFamily: 'Montserrat',
+    fontSize: '12px',
+    fontWeight: 800,
+    color: '#0086FF'
+  },
+  subEnvironmentHeader: {
+    borderBottom: '1px solid #E0E0E0',
+    height: '35px',
+    display: 'grid'
+  },
+  subEnvironmentCell: {
+    paddingLeft: '16px',
+    backgroundColor: '#F5FAFF',
+    display: 'flex',
+    alignItems: 'center'
+  },
+  subEnvironmentText: {
+    fontFamily: 'Montserrat',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: '#2F2F2F'
+  },
+  deploymentGrid: {
+    borderBottom: '1px solid #E0E0E0',
+    display: 'grid'
+  },
+  deploymentCell: {
+    padding: '12px',
+    backgroundColor: '#FFFFFF'
+  },
+  deploymentList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  multipleChip: {
+    position: 'absolute',
+    bottom: '4px',
+    right: '4px',
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #E0E0E0',
+    fontSize: '10px',
+    height: '15px',
+    zIndex: 1
+  },
+  skeletonGridContainer: {
+    display: 'grid',
+    gridTemplateColumns: '250px 1fr'
+  },
+  skeletonLeftCell: {
+    padding: '16px',
+    backgroundColor: '#FAFAFA',
+    borderBottom: '1px solid #E0E0E0',
+    borderRight: '1px solid #E0E0E0',
+    height: '35px'
+  },
+  skeletonRightCell: {
+    padding: '16px',
+    backgroundColor: '#F5FAFF',
+    borderBottom: '1px solid #E0E0E0',
+    height: '35px',
+    display: 'flex',
+    alignItems: 'center'
+  },
+  skeletonServicesCell: {
+    padding: '16px',
+    borderBottom: '1px solid #E0E0E0',
+    borderRight: '1px solid #E0E0E0',
+    height: '35px',
+    display: 'flex',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA'
+  },
+  skeletonSubEnvHeader: {
+    display: 'grid',
+    borderBottom: '1px solid #E0E0E0',
+    height: '35px'
+  },
+  skeletonSubEnvCell: {
+    paddingLeft: '16px',
+    fontSize: '12px',
+    fontWeight: '600',
+    backgroundColor: '#F5FAFF',
+    display: 'flex',
+    alignItems: 'center'
+  },
+  skeletonServiceRow: {
+    padding: '16px',
+    borderBottom: '1px solid #E0E0E0',
+    borderRight: '1px solid #E0E0E0',
+    display: 'flex',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    minHeight: '80px'
+  },
+  skeletonServiceContent: {
+    flex: 3
+  },
+  skeletonDeploymentGrid: {
+    display: 'grid',
+    borderBottom: '1px solid #E0E0E0'
+  },
+  skeletonDeploymentCell: {
+    padding: '12px',
+    backgroundColor: '#FFFFFF'
+  }
+}))
+
 const EnvironmentOverview = () => {
+  const classes = useStyles()
   const [state, setState] = useState({
     count: 0,
     moreAdvFilterList: [],
@@ -176,62 +416,28 @@ const EnvironmentOverview = () => {
       <div>
         {state.environments.map((envGroup, groupIdx) => (
           <div key={groupIdx}>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '250px 1fr',
-            }}>
-              <div style={{
-                padding: '16px',
-                backgroundColor: '#FAFAFA',
-                borderBottom: '1px solid #E0E0E0',
-                borderRight: '1px solid #E0E0E0',
-                height: '35px',
-              }}></div>
-              <div style={{
-                padding: '16px',
-                backgroundColor: '#F5FAFF',
-                borderBottom: '1px solid #E0E0E0',
-                height: '35px',
-                display: 'flex',
-                alignItems: 'center',
-              }}>
+            <div className={classes.skeletonGridContainer}>
+              <div className={classes.skeletonLeftCell}></div>
+              <div className={classes.skeletonRightCell}>
                 <GenericSkeleton width={60} height={20} style={{ borderRadius: '4px' }} />
               </div>
             </div>
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '250px 1fr',
-            }}>
-              <div style={{
-                padding: '16px',
-                borderBottom: '1px solid #E0E0E0',
-                borderRight: '1px solid #E0E0E0',
-                height: '35px',
-                display: 'flex',
-                alignItems: 'center',
-                backgroundColor: '#FAFAFA'
-              }}>
+            <div className={classes.skeletonGridContainer}>
+              <div className={classes.skeletonServicesCell}>
                 <GenericSkeleton width={80} height={20} style={{ borderRadius: '4px' }} />
               </div>
 
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${envGroup.children.length}, 1fr)`,
-                borderBottom: '1px solid #E0E0E0',
-                height: '35px'
-              }}>
+              <div
+                className={classes.skeletonSubEnvHeader}
+                style={{ gridTemplateColumns: `repeat(${envGroup.children.length}, 1fr)` }}
+              >
                 {envGroup.children.map((subEnv, idx) => (
                   <div
                     key={subEnv}
+                    className={classes.skeletonSubEnvCell}
                     style={{
-                      paddingLeft: "16px",
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      backgroundColor: '#F5FAFF',
-                      borderRight: idx < envGroup.children.length - 1 ? '1px solid #E0E0E0' : 'none',
-                      display: 'flex',
-                      alignItems: 'center',
+                      borderRight: idx < envGroup.children.length - 1 ? '1px solid #E0E0E0' : 'none'
                     }}
                   >
                     <GenericSkeleton width={70} height={20} style={{ borderRadius: '4px' }} />
@@ -241,42 +447,25 @@ const EnvironmentOverview = () => {
             </div>
 
             {[1, 2, 3, 4, 5].map((skeletonRow) => (
-              <div
-                key={skeletonRow}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '250px 1fr',
-                }}
-              >
-                <div style={{
-                  padding: '16px',
-                  borderBottom: '1px solid #E0E0E0',
-                  borderRight: '1px solid #E0E0E0',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  backgroundColor: '#FFFFFF',
-                  minHeight: '80px',
-                }}>
-
+              <div key={skeletonRow} className={classes.skeletonGridContainer}>
+                <div className={classes.skeletonServiceRow}>
                   <GenericSkeleton variant="circle" width={36} height={40} style={{ borderRadius: '4px' }} />
-                  <div style={{ flex: 3 }}>
+                  <div className={classes.skeletonServiceContent}>
                     <GenericSkeleton width="60%" height={14} style={{ marginBottom: '8px', borderRadius: '4px' }} />
                     <GenericSkeleton width="70%" height={20} style={{ borderRadius: '4px' }} />
                   </div>
                 </div>
 
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(${envGroup.children.length}, 1fr)`,
-                  borderBottom: '1px solid #E0E0E0',
-                }}>
+                <div
+                  className={classes.skeletonDeploymentGrid}
+                  style={{ gridTemplateColumns: `repeat(${envGroup.children.length}, 1fr)` }}
+                >
                   {envGroup.children.map((subEnv, idx) => (
                     <div
                       key={subEnv}
+                      className={classes.skeletonDeploymentCell}
                       style={{
-                        padding: '12px',
-                        backgroundColor: '#FFFFFF',
-                        borderRight: idx < envGroup.children.length - 1 ? '1px solid #E0E0E0' : 'none',
+                        borderRight: idx < envGroup.children.length - 1 ? '1px solid #E0E0E0' : 'none'
                       }}
                     >
                       <GenericSkeleton
@@ -297,7 +486,7 @@ const EnvironmentOverview = () => {
   }
 
   return (
-    <div style={{ padding: '20px', backgroundColor: "#ffffff" }}>
+    <div className={classes.root} >
       <PageHeader
         heading='Application Report'
         icon='ri-apps-line'
@@ -305,26 +494,18 @@ const EnvironmentOverview = () => {
       />
 
       {state.count !== 0 || true ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "70% 30%",
-            marginBottom: "0px",
-            width: '100%',
-            padding: "0px",
-            marginTop: '20px'
-          }}>
+        <div className={classes.filterContainer}>
           <Grid container>
             {state.moreAdvFilterList?.map((filterName) => {
               return (
-                <div key={filterName} className="ad-more-search mb-20">
+                <div key={filterName} className={`ad-more-search ${classes.advMoreSearch}`}>
                   <AdvanceSearchFilterCombo
                     filterName={filterName}
                   />
                 </div>
               )
             })}
-            <div className="ad-more-search mb-20">
+            <div className={`ad-more-search ${classes.advMoreSearch}`}>
               <AdvanceSearchFilterCombo
                 reset={state.resetCount}
                 autoClosedAfterSelection={true}
@@ -336,86 +517,37 @@ const EnvironmentOverview = () => {
             <div
               onKeyDown={() => { }}
               onClick={resetAdvFilter}
-              className="pl-15 ml-20 d-flex align-center justify-center cursor-pointer"
-              style={{
-                borderLeft: '1px solid #dedede',
-                height: '40px',
-                color: "#0086FF",
-                gap: "5px"
-              }}
+              className={classes.clearFilterButton}
               tabIndex={0}
               role="button"
             >
-              <span className='ri-filter-3-line font-20 cursor-pointer'></span>
+              <span className={`ri-filter-3-line ${classes.clearFilterIcon}`}></span>
               <span>Clear Filters</span>
             </div>
           </Grid>
         </div>
       ) : null}
 
-      <div style={{
-        marginTop: '30px',
-        border: '1px solid #E0E0E0',
-        borderRadius: '12px',
-        overflow: 'scroll',
-      }}>
-        <div style={{
-          padding: '10px 20px',
-          backgroundColor: '#FAFAFA',
-          borderBottom: '1px solid #E0E0E0'
-        }}>
-          {state.isLoading ?
-            (
-              <GenericSkeleton width={200} height={20} style={{ borderRadius: '4px' }} />
-            ) : (
-              <Typography style={{
-                fontFamily: 'Montserrat',
-                fontSize: '14px',
-                fontWeight: 600,
-                color: '#000000'
-              }}>
-                Application : {state.applicationName}
-              </Typography>
-            )}
+      <div className={classes.tableContainer}>
+        <div className={classes.applicationHeader}>
+          {state.isLoading ? (
+            <GenericSkeleton width={200} height={20} style={{ borderRadius: '4px' }} />
+          ) : (
+            <Typography className={classes.applicationName}>
+              Application : {state.applicationName}
+            </Typography>
+          )}
         </div>
 
-        {state.isLoading ? 
-
-        renderSkeleton() : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '250px 1fr',
-
-          }}>
-            <div style={{
-              borderRight: '1px solid #E0E0E0',
-              borderLeft: '1px solid #E0E0E0',
-              overflowY: 'auto',
-              backgroundColor: '#FFFFFF',
-              overflowX: 'hidden'
-            }}>
+        {state.isLoading ? renderSkeleton() : (
+          <div className={classes.gridContainer}>
+            <div className={classes.leftColumn}>
               {state.environments.map((envGroup, groupIdx) => (
                 <div key={groupIdx}>
-                  <div style={{
-                    height: '35px',
-                    backgroundColor: '#FAFAFA',
-                    borderBottom: '1px solid #E0E0E0',
-                  }}></div>
+                  <div className={classes.emptyHeaderCell}></div>
 
-                  <div style={{
-                    padding: '16px',
-                    borderBottom: '1px solid #E0E0E0',
-                    height: '35px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    backgroundColor: '#FAFAFA'
-                  }}>
-                    <Typography style={{
-                      fontFamily: 'Montserrat',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: '#000000'
-                    }}>
+                  <div className={classes.servicesHeader}>
+                    <Typography className={classes.servicesHeaderText} style={{ fontWeight: 600 }}>
                       Services
                     </Typography>
                   </div>
@@ -431,50 +563,28 @@ const EnvironmentOverview = () => {
                     return (
                       <div
                         key={service.id}
+                        className={classes.serviceRow}
                         style={{
-                          padding: '16px',
-                          borderBottom: '1px solid #E0E0E0',
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '12px',
-                          backgroundColor: '#FFFFFF',
                           minHeight: `${dynamicHeight}px`,
                           height: `${dynamicHeight}px`
                         }}
                       >
-                        <div style={{
-                          backgroundColor: '#EBF5FF',
-                          padding: '3px 6px',
-                          borderRadius: '6.75px',
-                          flexShrink: 0
-                        }}>
-                          <span className="ri-settings-3-line" style={{
-                            fontSize: '24px',
-                            color: '#0086FF',
-                          }}></span>
+                        <div className={classes.serviceIcon}>
+                          <span className="ri-settings-3-line"></span>
                         </div>
                         <div>
-                          <Typography style={{
-                            fontFamily: 'Montserrat',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            marginBottom: '4px',
-                            color: '#2F2F2F'
-                          }}>
+                          <Typography className={classes.serviceName} style={{ fontWeight: 600 }}>
                             {service.serviceName}
                           </Typography>
-                          <Typography style={{
-                            fontFamily: 'Montserrat',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            border: "1px solid",
-                            borderRadius: '4px',
-                            padding: '2px 4px',
-                            display: 'inline-block',
-                            borderColor: getServiceTypeBorderColor(service.serviceType),
-                            backgroundColor: getServiceTypebackgroundColor(service.serviceType),
-                            color: getServiceTypeColor(service.serviceType)
-                          }}>
+                          <Typography
+                            className={classes.serviceType}
+                            style={{
+                              borderColor: getServiceTypeBorderColor(service.serviceType),
+                              backgroundColor: getServiceTypebackgroundColor(service.serviceType),
+                              color: getServiceTypeColor(service.serviceType),
+                               fontWeight: 600 
+                            }}
+                          >
                             {service.serviceType}
                           </Typography>
                         </div>
@@ -485,56 +595,30 @@ const EnvironmentOverview = () => {
               ))}
             </div>
 
-            <div style={{
-              overflowX: 'auto',
-              overflowY: 'auto'
-            }}>
-                <div style={{
-                  display: "inline-block",
-                  minWidth: "max-content",
-                }}>
+            <div className={classes.rightColumn}>
+              <div className={classes.rightColumnInner}>
                 {state.environments.map((envGroup, groupIdx) => (
                   <div key={groupIdx}>
-                    <div style={{
-                      padding: '16px',
-                      backgroundColor: '#F5FAFF',
-                      borderBottom: '1px solid #E0E0E0',
-                      height: '35px',
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}>
-                      <Typography style={{
-                        fontFamily: 'Montserrat',
-                        fontSize: '12px',
-                        fontWeight: 800,
-                        color: '#0086FF'
-                      }}>
+                    <div className={classes.environmentHeader}>
+                      <Typography className={classes.environmentHeaderText} style={{ fontWeight: 600 }}>
                         {envGroup.parent}
                       </Typography>
                     </div>
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: `repeat(${envGroup.children.length}, 400px)`,
-                      borderBottom: '1px solid #E0E0E0',
-                      height: '35px'
-                    }}>
+                    <div
+                      className={classes.subEnvironmentHeader}
+                      style={{
+                        gridTemplateColumns: `repeat(${envGroup.children.length}, 400px)`
+                      }}
+                    >
                       {envGroup.children.map((subEnv, idx) => (
                         <div
                           key={subEnv}
+                          className={classes.subEnvironmentCell}
                           style={{
-                            paddingLeft: "16px",
-                            backgroundColor: '#F5FAFF',
-                            borderRight: idx < envGroup.children.length - 1 ? '1px solid #E0E0E0' : 'none',
-                            display: 'flex',
-                            alignItems: 'center',
+                            borderRight: idx < envGroup.children.length - 1 ? '1px solid #E0E0E0' : 'none'
                           }}
                         >
-                          <Typography style={{
-                            fontFamily: 'Montserrat',
-                            fontSize: '12px',
-                            fontWeight: 600,
-                            color: '#2F2F2F'
-                          }}>
+                          <Typography className={classes.subEnvironmentText} style={{ fontWeight: 600 }}>
                             {subEnv}
                           </Typography>
                         </div>
@@ -552,10 +636,9 @@ const EnvironmentOverview = () => {
                       return (
                         <div
                           key={service.id}
+                          className={classes.deploymentGrid}
                           style={{
-                            display: 'grid',
                             gridTemplateColumns: `repeat(${envGroup.children.length}, 400px)`,
-                            borderBottom: '1px solid #E0E0E0',
                             minHeight: `${dynamicHeight}px`,
                             height: `${dynamicHeight}px`
                           }}
@@ -563,33 +646,19 @@ const EnvironmentOverview = () => {
                           {envGroup.children.map((subEnv, idx) => (
                             <div
                               key={subEnv}
+                              className={classes.deploymentCell}
                               style={{
-                                padding: '12px',
-                                backgroundColor: '#FFFFFF',
-                                borderRight: idx < envGroup.children.length - 1 ? '1px solid #E0E0E0' : 'none',
+                                borderRight: idx < envGroup.children.length - 1 ? '1px solid #E0E0E0' : 'none'
                               }}
                             >
-                              <div style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '8px'
-                              }}>
+                              <div className={classes.deploymentList}>
                                 {service.deployments[subEnv]?.map((deployment, deployIdx) => (
                                   <div key={deployIdx} style={{ position: 'relative' }}>
                                     {service.id === 1 && subEnv === 'Dev_Sub2' && deployIdx === 2 && (
                                       <Chip
                                         label="Multiple"
                                         size="small"
-                                        sx={{
-                                          position: 'absolute',
-                                          bottom: '4px',
-                                          right: '4px',
-                                          backgroundColor: '#FFFFFF',
-                                          border: '1px solid #E0E0E0',
-                                          fontSize: '10px',
-                                          height: '15px',
-                                          zIndex: 1
-                                        }}
+                                        className={classes.multipleChip}
                                       />
                                     )}
                                     <DeploymentInfoCard
