@@ -1,0 +1,473 @@
+import React, { useEffect, useState } from 'react'
+import { makeStyles } from '@mui/styles';
+import Grid from '@mui/material/Grid';
+import SearchBar from "../../../../components/SearchBar";
+import Pagination from "../../../../components/Pagination";
+import AddPermissionsPolicies from '../add/AddPermissionsPolicies';
+import GenerateURL, { GenerateEndpointURL, GenerateSearchURL } from "../../../../util/APIUrlProvider";
+import InvokeApi from '../../../../util/apiInvoker';
+import properties from '../../../../properties/properties';
+import { Loading } from '../../../utils/Loading';
+import PermissionListingCard from './components/PermissionListingCard';
+import PageHeader from '../../../../components/PageHeader';
+import BlankPage from '../../../../components/BlankPage';
+import PolicyClone from './components/PolicyClone';
+import PageError from '../../../../components/genericComponents/Errors/PageError';
+import { usePermissions } from '../../../../contexts/PermissionContext';
+import { usePermissionAutoLoader } from '../../../../util/permissionAutoLoader';
+import { generateManagePolicesPermissionPayload } from '../../../../util/permissionsPayloadGenerators';
+import UserGroupListing from '../userGroupListing/UserGroupListing';
+import { useDocumentTitle } from '../../../../hooks/useDocumentTitle';
+
+
+const useStyles = makeStyles((theme) => ({
+    root: {
+        flexGrow: 1,
+        padding: '20px',
+        backgroundColor: '#fff',
+        height: 'calc( 100vh - 70px )',
+        "& .main-div": {
+        },
+        "& .card": {
+            display: "flex",
+            justifyContent: "space-between",
+            backgroundColor: "#ffffff",
+            border: "1px solid #EAEAEA",
+            boxShadow: "0px 2px 20px rgba(0, 0, 0, 0.05)",
+            borderRadius: "10px",
+            height: "89px",
+            margin: "10px 0px",
+            padding: "10px"
+        },
+    },
+}));
+
+
+const PermissionsPoliciesListing = () => {
+    const { hasPermission } = usePermissions();
+    const { autoLoadPermissions } = usePermissionAutoLoader();
+    const classes = useStyles();
+    const [state, setState] = useState({
+        permission_policies: [],
+        loading: true,
+        total_page: "",
+        curr_page: "",
+    })
+    const [cloneDialogState, setCloneDialogState] = useState({
+        open: false,
+        data: null
+    });
+    const [policyToSeeUserGroup, setPolicyToSeeUserGroup] = useState(null);
+    useDocumentTitle("Policies")
+
+
+    useEffect(() => {
+        const get_policies_permissions = GenerateEndpointURL({}, properties.api.get_policies);
+        const canFetch = hasPermission('GET', get_policies_permissions);
+        console.log(canFetch, "klfdksfkldsaf---")
+        if (canFetch) {
+            fetchPermissionsPolicy()
+        } else {
+            console.warn("🚫 Permission denied to fetch environment list");
+
+        }
+
+    }, [])
+
+    // console.log(state.permission_policies, "policy groups")
+
+    const fetchPermissionsPolicy = (data, url) => {
+        var requestInfo = {
+            endPoint: GenerateURL({}, properties.api.get_policies),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+
+        if (data) {
+            requestInfo.endPoint = GenerateSearchURL(data, requestInfo.endPoint);
+        }
+
+        if (url) {
+            requestInfo.endPoint = url;
+        }
+
+        InvokeApi(requestInfo, handleSuccessApiHit, handleFailedApiHit);
+        setState(new_state => ({
+            ...new_state,
+            loading: true,
+            search_data: data,
+            search_query_name: data ? (data.name ? data.name : "") : "",
+        }));
+    }
+
+    function handleSuccessApiHit(data) {
+        if (Array.isArray(data?.results)) {
+            autoLoadPermissions({
+                list: data.results,
+                generatorFn: generateManagePolicesPermissionPayload,
+                getArgs: (item) => [item.id],
+            });
+        }
+        setState(new_state => ({
+            ...new_state,
+            permission_policies: data.results,
+            loading: false,
+            count: data.count,
+            next: data.next ? properties.api.baseURL + data.next : null,
+            previous: data.previous ? properties.api.baseURL + data.previous : null,
+            total_page: Number.isInteger(Number(data.count) / 10)
+                ? (Number(data.count) / 10).toFixed(0)
+                : (Number(data.count) / 10 + 1).toFixed(0) > Number(data.count) / 10 + 1
+                    ? (Number(data.count) / 10 + 1).toFixed(0) - 1
+                    : (Number(data.count) / 10 + 1).toFixed(0),
+            curr_page: 1,
+        }));
+    }
+
+    function handleFailedApiHit(error, statusCode) {
+        setState(new_state => ({
+            ...new_state,
+            error: error,
+            loading: false,
+            statusCode: statusCode
+        }))
+    }
+
+    function fetchPrevPermissionInfo(data, url) {
+        var requestInfo = {
+            endPoint: GenerateURL({}, properties.api.get_policies),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+        if (data) {
+            requestInfo.endPoint = GenerateSearchURL(data, requestInfo.endPoint);
+        }
+        if (url) {
+            requestInfo.endPoint = url;
+        }
+        setState((new_state) => ({
+            ...new_state,
+            search_data: data,
+            current: requestInfo.endPoint,
+            loading: true
+        }));
+        InvokeApi(
+            requestInfo,
+            prevPermissionInfoFetchSuccess,
+            prevPermissionInfoFetchFailure
+        );
+    }
+
+    function prevPermissionInfoFetchSuccess(data) {
+        if (Array.isArray(data?.results)) {
+            autoLoadPermissions({
+                list: data.results,
+                generatorFn: generateManagePolicesPermissionPayload,
+                getArgs: (item) => [item.id],
+            });
+        }
+        setState((new_state) => ({
+            ...new_state,
+            loading: false,
+            permission_policies: data.results,
+            count: data.count,
+            next: data.next ? properties.api.baseURL + data.next : null,
+            previous: data.previous ? properties.api.baseURL + data.previous : null,
+            total_page: Number.isInteger(Number(data.count) / 10)
+                ? (Number(data.count) / 10).toFixed(0)
+                : (Number(data.count) / 10 + 1).toFixed(0) > Number(data.count) / 10 + 1
+                    ? (Number(data.count) / 10 + 1).toFixed(0) - 1
+                    : (Number(data.count) / 10 + 1).toFixed(0),
+            curr_page: Number(new_state.curr_page - 1),
+        }));
+    }
+
+    function prevPermissionInfoFetchFailure(error, statusCode) {
+        setState(new_state => ({
+            ...new_state,
+            error: error,
+            loading: false,
+            statusCode: statusCode
+        }))
+    }
+
+    function fetchPagePermissionInfo(enteredPageNumber) {
+        var requestInfo = {
+            endPoint: GenerateURL({}, properties.api.get_policies),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+        if (enteredPageNumber > 1) {
+            requestInfo.endPoint =
+                requestInfo.endPoint +
+                "?limit=10&offset=" +
+                (enteredPageNumber - 1) * 10;
+        }
+        setState((new_state) => ({
+            ...new_state,
+            loading: true
+        }));
+        var current_page = enteredPageNumber;
+        InvokeApi(
+            requestInfo,
+            (response) => {
+                PagePermissionInfoFetchSuccess(response, current_page);
+            },
+            PagePermissionInfoFetchFailure
+        );
+    }
+
+    function PagePermissionInfoFetchSuccess(data, count) {
+        if (Array.isArray(data?.results)) {
+            autoLoadPermissions({
+                list: data.results,
+                generatorFn: generateManagePolicesPermissionPayload,
+                getArgs: (item) => [item.id],
+            });
+        }
+        setState((new_state) => ({
+            ...new_state,
+            loading: false,
+            permission_policies: data.results,
+            count: data.count,
+            next: data.next ? properties.api.baseURL + data.next : null,
+            previous: data.previous ? properties.api.baseURL + data.previous : null,
+            total_page: Number.isInteger(Number(data.count) / 10)
+                ? (Number(data.count) / 10).toFixed(0)
+                : (Number(data.count) / 10 + 1).toFixed(0) > Number(data.count) / 10 + 1
+                    ? (Number(data.count) / 10 + 1).toFixed(0) - 1
+                    : (Number(data.count) / 10 + 1).toFixed(0),
+            curr_page: Number(count),
+        }));
+    }
+
+    function PagePermissionInfoFetchFailure(error, statusCode) {
+        setState(new_state => ({
+            ...new_state,
+            error: error,
+            loading: false,
+            statusCode: statusCode
+        }))
+    }
+
+    function fetchNextPermissionInfo(data, url) {
+        var requestInfo = {
+            endPoint: GenerateURL({}, properties.api.get_policies),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+        if (data) {
+            requestInfo.endPoint = GenerateSearchURL(data, requestInfo.endPoint);
+        }
+        if (url) {
+            requestInfo.endPoint = url;
+        }
+        setState((new_state) => ({
+            ...new_state,
+            search_data: data,
+            current: requestInfo.endPoint,
+            loading: true
+        }));
+        InvokeApi(
+            requestInfo,
+            nextPermissionInfoFetchSuccess,
+            nextPermissionInfoFetchFailure
+        );
+    }
+
+    function nextPermissionInfoFetchSuccess(data) {
+        if (Array.isArray(data?.results)) {
+            autoLoadPermissions({
+                list: data.results,
+                generatorFn: generateManagePolicesPermissionPayload,
+                getArgs: (item) => [item.id],
+            });
+        }
+        setState((new_state) => ({
+            ...new_state,
+            loading: false,
+            permission_policies: data.results,
+            count: data.count,
+            next: data.next ? properties.api.baseURL + data.next : null,
+            previous: data.previous ? properties.api.baseURL + data.previous : null,
+            total_page: Number.isInteger(Number(data.count) / 10)
+                ? (Number(data.count) / 10).toFixed(0)
+                : (Number(data.count) / 10 + 1).toFixed(0) > Number(data.count) / 10 + 1
+                    ? (Number(data.count) / 10 + 1).toFixed(0) - 1
+                    : (Number(data.count) / 10 + 1).toFixed(0),
+            curr_page: Number(new_state.curr_page + 1),
+        }));
+    }
+
+    function nextPermissionInfoFetchFailure(error, statusCode) {
+        setState(new_state => ({
+            ...new_state,
+            error: error,
+            loading: false,
+            statusCode: statusCode
+        }))
+    }
+
+    const invokeSearch = (data) => {
+        fetchPermissionsPolicy(data)
+    }
+    const refresh_count = () => {
+        fetchPermissionsPolicy();
+    }
+    function handleClickOpenDialog() {
+        setState(new_state => ({
+            ...new_state,
+            open: true,
+
+        }))
+    }
+    const handleClose = () => {
+        setState(new_state => ({
+            ...new_state,
+            open: false,
+
+        }))
+    }
+    console.log("lkdskldslkd", state);
+
+    const handlePolicyListing = (policyId) => {
+        console.log("policyId in listing page", policyId)
+        setPolicyToSeeUserGroup(policyId)
+    }
+
+
+    return (
+        <div className={classes.root}>
+            {
+                state.loading ?
+                    <Loading
+                    /> :
+                    state.error ?
+                        <PageError error={state.error} statusCode={state.statusCode} />
+                        :
+                        state.permission_policies.length > 0 ?
+                            <>
+                                <div className='d-flex align-center space-between mb-24'>
+                                    <PageHeader
+                                        heading="Manage Policies"
+                                        subHeading="Displaying Overall summary of Policies"
+                                        primaryButton={null}
+                                    />
+                                    <div className='d-flex align-center'>
+                                        <button
+                                            className="btn btn-outline-grey mr-5 d-flex align-center justify-center text-center"
+                                            onClick={handleClickOpenDialog}
+                                        >
+                                            <span className="ri-file-copy-2-line"></span> Clone Policy
+                                        </button>
+                                        <AddPermissionsPolicies
+                                            refresh_count={refresh_count}
+                                            prev_state={null} />
+                                    </div>
+                                </div>
+                                <Grid container spacing={2} className="mb-20">
+                                    <Grid item lg={9}>
+                                        <SearchBar
+                                            search_data={state.search_data}
+                                            default_filter={{ name: "name", label: "Name" }}
+                                            search_call_back={invokeSearch}
+                                            clear_search_callback={fetchPermissionsPolicy}
+                                        />
+                                    </Grid>
+
+                                    <Grid item lg={12} sm={12} xl={12} xs={12}>
+                                        <div className="d-grid color-primary font-12 font-weight-600"
+                                            style={{
+                                                gridTemplateColumns: '200px 1fr 60px',
+                                                gap: '10px',
+                                                padding: '12px 12px'
+                                            }}>
+                                            <p> Name </p>
+                                            <p> Assigned Permission Group </p>
+                                            <p></p>
+                                        </div>
+                                        <div className="scrollable-div__p1">
+                                            {state.permission_policies.map((permission_policy, key) => {
+                                                return (
+                                                    <PermissionListingCard permission_policy={permission_policy}
+                                                        key={key}
+                                                        refreshFn={refresh_count}
+                                                        handlePolicyListing={() => handlePolicyListing(permission_policy.id)}
+                                                    />
+                                                )
+                                            })}
+                                        </div>
+                                    </Grid>
+                                    <Grid item lg={12} sm={12} xl={3} xs={12}>
+                                        <Pagination
+                                            total_count={state.total_page}
+                                            current_page_count={state.curr_page}
+                                            next={state.next}
+                                            previous={state.previous}
+                                            on_previous_click={() => {
+                                                fetchPrevPermissionInfo(null, state.previous);
+                                            }}
+                                            on_next_click={() => {
+                                                fetchNextPermissionInfo(null, state.next);
+                                            }}
+                                            on_pageNumber_click={(pageNumber) => {
+                                                fetchPagePermissionInfo(pageNumber);
+                                            }}
+                                        />
+                                    </Grid>
+                                </Grid>
+                            </>
+                            :
+                            <div className="main-container-error" style={{ height: 'calc(100vh - 110px)' }}>
+                                <div
+                                    className='sq-avtar-one d-flex align-center justify-center mb-24 m-auto'
+                                    style={{
+                                        width: '56px',
+                                        height: '56px',
+                                        borderRadius: '6px',
+                                        backgroundColor: '#EBF5FF'
+                                    }}
+                                >
+                                    <span className={`ri-cpu-line font-28 text-anchor-blue`}></span>
+                                </div>
+
+                                <p className='font-18 font-weight-600 color-primary mb-24'>{state.search_data ? "No Results Found" : "You have no policies added"}</p>
+                                {state.search_data ?
+                                    <button
+                                        className="btn btn-primary mr-0 d-flex align-center justify-center text-center"
+                                        onClick={() => fetchPermissionsPolicy()}
+                                    >
+                                        Refesh
+                                    </button>
+                                    :
+
+                                    <AddPermissionsPolicies
+                                        refresh_count={refresh_count}
+                                        prev_state={null} />
+                                }
+                            </div>
+            }
+            <PolicyClone
+                open={state.open}
+                handleClose={handleClose}
+                refresh_count={() => {
+                    handleClose()
+                    refresh_count();
+
+                }} />
+            {
+                policyToSeeUserGroup &&
+                <UserGroupListing
+                    policyId={policyToSeeUserGroup}
+                    handleClose={() => {
+                        setPolicyToSeeUserGroup(null)
+                    }}
+                />
+            }
+            <UserGroupListing />
+        </div>
+    )
+}
+
+export default PermissionsPoliciesListing
+
