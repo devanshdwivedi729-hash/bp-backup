@@ -1,0 +1,686 @@
+import { Box, Skeleton } from '@mui/material'
+import React, { useEffect, useRef, useState } from 'react'
+import BuildVelocityHeader from './components/BuildVelocityHeader'
+import BuildVelocitySubHeader from './components/BuildVelocitySubHeader'
+import BuildVelocityBody from './components/BuildVelocityBody'
+import DrilldownPieChart from '../components/DrilldownPieChart'
+import StackedColumnChart from '../components/StackedColumnChart'
+import properties from '../../properties/properties'
+import InvokeApi from '../../util/apiInvoker'
+import GenerateURL from '../../util/APIUrlProvider'
+import BuildVelocityTable from './components/BuildVelocityTable'
+import { mapEntityDataToPieSeries } from '../../util/buildVelocityChartMapper'
+
+
+const PAGE_SIZE = 10;
+
+
+const columns = [
+    { name: 'env_id', label: 'Environment', minWidth: 220 },
+    { name: 'build_status', label: 'Build Status', minWidth: 117, meta: { mainLogoType: 'status-tag' } },
+    { name: 'applications_teams', label: 'Applications/Teams', minWidth: 320 },
+    { name: 'ms_deployment_name', label: 'MS Deployment Name', minWidth: 220 },
+    { name: 'time', label: 'Time', minWidth: 220 },
+    { name: 'deploy_tag', label: 'Deploy Tag', minWidth: 220 },
+    { name: 'triggered_by', label: 'Triggered By', minWidth: 220 },
+];
+const MOCK_SUMMARY = {
+    Build_time: {
+        Average_build_time: 4327,
+        Trend: -8.4,
+    },
+    total_build: {
+        total: 3842,
+        trend: 12.6,
+    },
+    build_success_rate: {
+        total_percentage: 87.3,
+        total: 3354,
+        trend: 4.1,
+    },
+    build_failure_rate: {
+        total_percentage: 12.7,
+        total: 488,
+        trend: -4.1,
+    },
+};
+
+ const mockChartData = {
+    rootSeries: {
+        name: "Applications",
+        data: [
+            {
+                name: "App 1",
+                y: 120,
+                drilldown: "app1-services",
+                total_build: 120,
+                failed: 20,
+                passed: 100,
+            },
+            {
+                name: "App 2",
+                y: 80,
+                drilldown: "app2-services",
+                total_build: 80,
+                failed: 10,
+                passed: 70,
+            },
+            {
+                name: "App 3",
+                y: 50,
+                drilldown: "app3-services",
+                total_build: 50,
+                failed: 5,
+                passed: 45,
+            },
+        ],
+    },
+
+    drilldownSeries: [
+        {
+            id: "app1-services",
+            name: "App 1 Services",
+            data: [
+                {
+                    name: "Service A",
+                    y: 50,
+                    total_build: 50,
+                    failed: 8,
+                    passed: 42,
+                },
+                {
+                    name: "Service B",
+                    y: 40,
+                    total_build: 40,
+                    failed: 7,
+                    passed: 33,
+                },
+                {
+                    name: "Service C",
+                    y: 30,
+                    total_build: 30,
+                    failed: 5,
+                    passed: 25,
+                },
+            ],
+        },
+        {
+            id: "app2-services",
+            name: "App 2 Services",
+            data: [
+                {
+                    name: "Service X",
+                    y: 30,
+                    total_build: 30,
+                    failed: 4,
+                    passed: 26,
+                },
+                {
+                    name: "Service Y",
+                    y: 50,
+                    total_build: 50,
+                    failed: 6,
+                    passed: 44,
+                },
+            ],
+        },
+        {
+            id: "app3-services",
+            name: "App 3 Services",
+            data: [
+                {
+                    name: "Service M",
+                    y: 20,
+                    total_build: 20,
+                    failed: 2,
+                    passed: 18,
+                },
+                {
+                    name: "Service N",
+                    y: 30,
+                    total_build: 30,
+                    failed: 3,
+                    passed: 27,
+                },
+            ],
+        },
+    ],
+};
+
+
+
+const mapListItemToRow = (item) => ({
+    id: item.id,
+    env_id: item.environment
+        ? `${item.environment}${item.sub_environment ? ' / ' + item.sub_environment : ''}`
+        : (item.sub_environment ?? 'N/A'),
+    build_status: item.status ?? 'N/A',
+    applications_teams: item.application ?? 'N/A',
+    ms_deployment_name: item.service ?? 'N/A',
+    time: item.created_at
+        ? new Date(item.created_at).toLocaleString('en-IN', {
+            day: '2-digit', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', hour12: true
+        })
+        : 'N/A',
+    deploy_tag: item.tag ?? 'N/A',
+    triggered_by: item.trigger_by ?? 'N/A',
+});
+
+const mapTimeDataToStackedChart = (timeData) => {
+    if (!timeData || Object.keys(timeData).length === 0) {
+        return null;
+    }
+
+    const sortedDates = Object.keys(timeData).sort();
+
+    const categories = sortedDates.map(date => {
+        const d = new Date(date);
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    });
+
+    const series = [
+        {
+            name: 'Passed',
+            data: sortedDates.map(date => timeData[date].passed),
+        },
+        {
+            name: 'Failed',
+            data: sortedDates.map(date => timeData[date].failed),
+        }
+    ];
+
+    return { categories, series };
+};
+const BuildVelocity = () => {
+    const headerRef = useRef(null);
+    const isFirstRender = useRef(true);
+    // App chart: APP → SERVICE (on click of app slice)
+    const [chartContext, setChartContext] = useState({
+        level: "APP",
+        selectedApp: null,
+    });
+
+    // Env chart: MASTER_ENV → SUB_ENV (on click of env slice)
+    const [envChartContext, setEnvChartContext] = useState({
+        level: "MASTER_ENV",
+        selectedEnv: null,
+    });
+
+    const [state, setState] = useState({
+        summaryData: null,
+        summaryLoading: false,
+        buildChartData: null,
+        envChartData: null,
+        stackedChartData: null,
+        dateRange: {
+            startDate: "2024-12-12",
+            endDate: "2025-01-01"
+        },
+        selectedOpt: 'dashboard_view'
+    });
+
+    const [listState, setListState] = useState({
+        data: [],
+        loading: false,
+        count: 0,
+        next: null,
+        previous: null,
+        currentPage: 1,
+    });
+
+    const [appliedFilters, setAppliedFilters] = useState({
+        teams: [],
+        journey: [],
+        environments: []
+    });
+
+    // Initial fetch on component mount
+    useEffect(() => {
+        fetchVelocityData();
+        fetchVelocityGraphData();
+        loadListData();
+    }, []);
+
+    // Fetch when filters change
+    useEffect(() => {
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
+
+        const hasApplication = appliedFilters.teams.length > 0;
+        const hasEnvironment = appliedFilters.environments.length > 0;
+        if (!hasApplication) {
+            setChartContext({ level: "APP", selectedApp: null });
+        }
+        if (!hasEnvironment) {
+            setEnvChartContext({ level: "MASTER_ENV", selectedEnv: null });
+        }
+        setState(prev => ({
+            ...prev,
+            summaryData: null,
+            buildChartData: null,
+            envChartData: null,
+            stackedChartData: null,
+        }));
+        if (hasApplication || hasEnvironment) {
+            fetchVelocityData(appliedFilters);
+            fetchVelocityGraphData(
+                hasApplication ? appliedFilters.teams[0] : null,
+                hasEnvironment ? appliedFilters.environments[0] : null
+            );
+        } else {
+            fetchVelocityData();
+            fetchVelocityGraphData();
+        }
+        loadListData(1, appliedFilters);
+    }, [appliedFilters]);
+
+    const buildQueryParams = (filters, overrideDates) => {
+        const startDate = overrideDates?.startDate || state.dateRange.startDate;
+        const endDate = overrideDates?.endDate || state.dateRange.endDate;
+
+        let params = `?start_date=${startDate}&end_date=${endDate}`;
+
+        const app = filters?.teams?.[0];
+        if (app) {
+            params += `&application=${encodeURIComponent(app)}`;
+        }
+
+        const env = filters?.environments?.[0];
+        if (env) {
+            params += `&environment=${encodeURIComponent(env)}`;
+        }
+
+        return params;
+    };
+
+    const fetchVelocityData = (filters = null, overrideDates = null) => {
+        let endpoint = properties.api.build_velocity.build_summary;
+        const queryParams = buildQueryParams(filters, overrideDates);
+        setState(prev => ({ ...prev, summaryLoading: true }));
+        var requestInfo = {
+            endPoint: GenerateURL({}, endpoint) + queryParams,
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+
+        InvokeApi(requestInfo, (response) => {
+            setState((prevState) => ({
+                ...prevState,
+                summaryData: { ...response },
+                summaryLoading: false,
+            }));
+        }, (error) => {
+            console.log(error, "Error fetching velocity data");
+            setState(prev => ({ ...prev, summaryLoading: false }));
+        });
+    }
+
+    const fetchVelocityGraphData = (appName, envName, overrideDates = null) => {
+        let endpoint = properties.api.build_velocity.fetch_build_velocity_graph_data;
+
+        const startDate = overrideDates?.startDate || state.dateRange.startDate;
+        const endDate = overrideDates?.endDate || state.dateRange.endDate;
+
+        let url =
+            GenerateURL({}, endpoint) +
+            `?start_date=${startDate}&end_date=${endDate}&type=D`;
+
+        if (appName) {
+            url += `&application=${encodeURIComponent(appName)}`;
+        }
+
+        if (envName) {
+            url += `&environment=${encodeURIComponent(envName)}`;
+        }
+
+        var requestInfo = {
+            endPoint: url,
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+
+        InvokeApi(requestInfo, fetchVelocityGraphDataSuccess, (error) => {
+            console.log(error, "Error fetching velocity graph data");
+        });
+    }
+
+    const fetchVelocityGraphDataSuccess = (response) => {
+        const hasAppFilter = appliedFilters.teams.length > 0;
+        const hasEnvFilter = appliedFilters.environments.length > 0;
+
+         const buildChart = mapEntityDataToPieSeries(
+        response.entity_data,
+        hasAppFilter ? "Services" : "Applications",
+        hasAppFilter
+    );
+
+    const envChart = mapEntityDataToPieSeries(
+        response.entity_environment_data,
+        hasEnvFilter ? "Sub Environments" : "Environments",
+        hasEnvFilter
+    );
+
+    const stackedChart = mapTimeDataToStackedChart(response.time_data);
+
+    setState((prev) => ({
+        ...prev,
+        buildChartData: buildChart,
+        envChartData: envChart,
+        stackedChartData: stackedChart,
+    }));
+    };
+
+
+    // ─── List Data with Pagination ───
+    function loadListData(page = 1, filters = null, overrideDates = null) {
+        const endpoint = properties.api.build_velocity.fetch_build_velocity_list_data;
+        const queryParams = buildQueryParams(filters || appliedFilters, overrideDates);
+        const offset = (page - 1) * PAGE_SIZE;
+        const paginationParams = `&limit=${PAGE_SIZE}&offset=${offset}`;
+
+        setListState(prev => ({ ...prev, loading: true }));
+
+        const requestInfo = {
+            endPoint: GenerateURL({}, endpoint) + queryParams + paginationParams,
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        };
+
+        InvokeApi(requestInfo, (response) => {
+            const mappedData = (response.results || []).map(mapListItemToRow);
+            setListState({
+                data: mappedData,
+                loading: false,
+                count: response.count || 0,
+                next: response.next,
+                previous: response.previous,
+                currentPage: page,
+            });
+        }, (error) => {
+            console.log(error, "Error fetching velocity list data");
+            setListState(prev => ({ ...prev, loading: false }));
+        });
+    }
+
+    const handleListNextPage = () => {
+        if (listState.next) {
+            loadListData(listState.currentPage + 1);
+        }
+    };
+
+    const handleListPreviousPage = () => {
+        if (listState.previous) {
+            loadListData(listState.currentPage - 1);
+        }
+    };
+
+    const handleListPageNumberClick = (pageNumber) => {
+        loadListData(pageNumber);
+    };
+
+    const handleFiltersChange = (filters) => {
+        console.log('Filters changed:', filters);
+        setAppliedFilters(filters);
+    };
+
+    const handleDateRangeChange = (startDate, endDate) => {
+        const newDates = { startDate, endDate };
+
+        setState(prevState => ({
+            ...prevState,
+            dateRange: newDates,
+            summaryData: null,
+            buildChartData: null,
+            envChartData: null,
+            stackedChartData: null,
+        }));
+
+        fetchVelocityData(appliedFilters, newDates);
+        fetchVelocityGraphData(
+            appliedFilters.teams?.[0] || null,
+            appliedFilters.environments?.[0] || null,
+            newDates
+        );
+        loadListData(1, appliedFilters, newDates);
+    };
+
+    const changedViewHandler = (selectedTab) => {
+        setState(prevState => ({
+            ...prevState,
+            selectedOpt: selectedTab
+        }));
+    }
+
+    // App slice click → set app filter, switch to SERVICE level
+    const handleApplicationClick = (appData) => {
+        const appName = appData ? appData.name : null;
+        if (!appName) return;
+
+        setChartContext({
+            level: "SERVICE",
+            selectedApp: appName,
+        });
+
+        // Reset chart data to show skeleton while loading
+        setState(prev => ({
+            ...prev,
+            buildChartData: null,
+        }));
+
+        if (headerRef.current?.addTeamToFilter) {
+            headerRef.current.addTeamToFilter(appName);
+        }
+    };
+
+    // Env slice click → set env filter, switch to SUB_ENV level
+    const handleEnvironmentClick = (envData) => {
+        const envName = envData ? envData.name : null;
+        if (!envName) return;
+
+        setEnvChartContext({
+            level: "SUB_ENV",
+            selectedEnv: envName,
+        });
+
+        // Reset chart data to show skeleton while loading
+        setState(prev => ({
+            ...prev,
+            envChartData: null,
+        }));
+
+        if (headerRef.current?.addServiceToFilter) {
+            headerRef.current.addServiceToFilter(envName);
+        }
+    };
+
+
+    const totalPages = Math.ceil(listState.count / PAGE_SIZE);
+
+    return (
+        <Box>
+            <BuildVelocityHeader
+                ref={headerRef}
+                onFiltersChange={handleFiltersChange}
+                changedViewHandler={changedViewHandler}
+            />
+            <BuildVelocitySubHeader
+                onDateRangeChange={handleDateRangeChange}
+            />
+            {/* <BuildVelocityBody
+                loading={state.summaryLoading}
+                metricsData={state.summaryData}
+                dateRange={state.dateRange}
+            /> */}
+            <BuildVelocityBody
+                loading={false}
+                metricsData={MOCK_SUMMARY}
+                dateRange={state.dateRange}
+            />
+            <Box sx={{ padding: '0px 20px' }}>
+                {
+                    state.selectedOpt === 'dashboard_view' ? (
+                        <>
+                            <p className='font-12 font-weight-600 color-primary mb-12'>Build Distribution Graph</p>
+                            <Box sx={{ border: '1px solid #e6e6e6', borderRadius: '12px', padding: '20px 16px', marginBottom: '40px' }}>
+                                <p className='font-14 font-weight-600 color-primary mb-12 d-flex align-center' style={{ gap: '5px' }}>
+                                    <i className='ri-bar-chart-fill color-tertiary font-16' />
+                                    Average Build Time (in mins) & Total Build
+                                </p>
+
+                                <Box sx={{ display: 'flex', justifyContent: 'space-evenly', marginTop: '40px', marginBottom: '40px', gap: '42px' }}>
+                                    {/* <ChartWrapper
+                                        title="Build Distribution"
+                                        chartData={state.buildChartData}
+                                        chartType="build"
+                                        chartLevel={chartContext.level}
+                                        onSliceClick={handleApplicationClick}
+                                    /> */}
+                                    <ChartWrapper
+                                        title="Build Distribution"
+                                        chartData={mockChartData}
+                                        chartType="build"
+                                        chartLevel="APP"
+                                        onSliceClick={(data, type) => {
+                                            console.log("Clicked:", data, type);
+                                        }}
+                                    />
+
+
+
+                                    <ChartWrapper
+                                        title="Deploy"
+                                        chartData={mockChartData}
+                                        chartType="build"
+                                        chartLevel="APP"
+                                        onSliceClick={(data, type) => {
+                                            console.log("Clicked:", data, type);
+                                        }}
+                                    />
+
+                                </Box>
+                                {state.stackedChartData ? (
+                                    <StackedColumnChart
+                                        title="Build Trends Over Time (Date-based)"
+                                        categories={state.stackedChartData.categories}
+                                        series={state.stackedChartData.series}
+                                        stacking="normal"
+                                        height="500px"
+                                    />
+                                ) : (
+                                    <Box sx={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+                                        <Skeleton variant="rectangular" width="100%" height={400} sx={{ borderRadius: '8px' }} />
+                                    </Box>
+                                )}
+                            </Box>
+                        </>
+                    ) : (
+                        <>
+                            <p className='font-14 font-weight-600 color-primary mb-12 d-flex align-center' style={{ gap: '5px' }}>
+                                <i className='ri-bar-chart-fill color-tertiary font-16' />
+                                Average Build Time (in mins) & Total Build
+                            </p>
+                            <BuildVelocityTable
+                                columnNames={columns}
+                                apiFetchedData={listState.data}
+                                loading={listState.loading}
+                                // Pagination props
+                                totalCount={totalPages}
+                                currentPage={listState.currentPage}
+                                next={listState.next}
+                                previous={listState.previous}
+                                onNextClick={handleListNextPage}
+                                onPreviousClick={handleListPreviousPage}
+                                onPageNumberClick={handleListPageNumberClick}
+                            />
+                        </>
+                    )
+                }
+            </Box>
+        </Box>
+    )
+}
+
+export default BuildVelocity
+
+
+const ChartWrapper = ({
+    title,
+    chartData,
+    chartType,
+    onSliceClick,
+    chartLevel
+}) => {
+    if (!chartData) {
+        return <ChartSkeleton title={title} />;
+    }
+
+    if (!hasValidPieData(chartData)) {
+        return <NoDataState title={title} />;
+    }
+
+    return (
+        <DrilldownPieChart
+            title={title}
+            rootSeries={chartData.rootSeries}
+            drilldownSeries={chartData.drilldownSeries}
+            height="500px"
+            chartType={chartType}
+            chartLevel={chartLevel}
+            onSliceClick={onSliceClick}
+        />
+    );
+};
+
+const hasValidPieData = (chartData) =>
+    chartData &&
+    chartData.rootSeries?.data?.length > 0 &&
+    chartData.rootSeries.data.some(d => d.y > 0);
+
+
+const NoDataState = ({ title }) => (
+    <Box
+        sx={{
+            width: "500px",
+            height: "500px",
+            border: "1px dashed #d0d0d0",
+            borderRadius: "8px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "column",
+            color: "#8a8a8a"
+        }}
+    >
+        <p className="font-14 font-weight-600">{title}</p>
+        <p className="font-12">No data available for selected filters</p>
+    </Box>
+);
+
+const ChartSkeleton = ({ title = "Loading chart..." }) => {
+    return (
+        <Box
+            sx={{
+                width: "500px",
+                height: "500px",
+                // border: "1px solid #e6e6e6",
+                // borderRadius: "12px",
+                // padding: "20px 16px",
+                display: "flex",
+                flexDirection: "column",
+            }}
+        >
+            {/* <Skeleton variant="text" width={180} height={24} sx={{ marginBottom: "16px" }} /> */}
+            <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Skeleton variant="circular" width={260} height={260} />
+            </Box>
+            {/* <Box sx={{ marginTop: "20px" }}>
+                {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} variant="text" width={`${60 + i * 10}%`} height={18} sx={{ marginBottom: "8px" }} />
+                ))}
+            </Box> */}
+        </Box>
+    );
+};
