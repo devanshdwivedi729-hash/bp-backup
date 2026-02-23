@@ -1,0 +1,627 @@
+import React, { useState, useEffect } from 'react';
+import { makeStyles } from '@mui/styles';
+import { useParams, Link, useLocation } from 'react-router-dom';
+import Grid from '@mui/material/Grid';
+import GenerateURL from '../../util/APIUrlProvider';
+import properties from '../../properties/properties';
+import InvokeApi, { PostData } from '../../util/apiInvoker';
+import { VALIDATION_TYPE_REQUIRED, ValidateDataSet } from '../../util/Validator';
+import { Redirect } from 'react-router';
+import { Loading } from '../utils/Loading';
+import { ErrorComponent } from '../utils/Error';
+import JobTemplateCard from './JobTemplateCard'
+import CommonHorizontalTab from '../../components/genericComponents/CommonHorizontalTab';
+import SyntaxHighlighter from 'react-syntax-highlighter';
+import { atomOneDark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import { ConvertJobTemplateObjtoYAML } from '../../controllers/PipelineController';
+
+import { Input } from '../../components/genericComponents/Input';
+import { getCommonFunctions } from '../serviceRevamp/add/ci_flow/SourceDetails';
+import { useCustomSnackbar } from '../../contexts/SnackbarContext';
+import { showErrorHandlerUpdated } from '../../util/util';
+
+
+const EditJobTemplates = props => {
+    const { showSnackbar } = useCustomSnackbar();
+    let transformed_job_template = {}
+
+    const classes = useStyles();
+
+    const location = useLocation()
+
+    const [previousStateLayers, setPreviousStateLayers] = useState(location && location.state ? location.state.previous_canvas_layer : null) // hold layer copy of canvas
+
+    const { application_id, template_id } = useParams();
+
+    const [dataForRendered, setDataForRendered] = useState()
+    const [jobVersion,setJobVersion] = useState();
+
+    const inherits = {};
+
+    const [templateNameEdit, setTemplateNameEdit] = useState(false)
+    const [state, setState] = useState({
+        data: {},
+        error: {},
+        selectedTab: 1,
+        job_list: {},
+        open: false,
+        openJob: false,
+        validations: {
+            name: [VALIDATION_TYPE_REQUIRED],
+
+        },
+
+    });
+
+    const commonFunctions = getCommonFunctions(state, setState, inherits)
+
+    useEffect(() => {
+        if (template_id) {
+            loadTemplate(template_id, application_id);
+        }
+
+    }, [application_id, template_id]);
+
+    useEffect(() => {
+
+        if (dataForRendered) {
+
+            const currentLayerStructure = dataForRendered && dataForRendered.map(layer => {
+
+                return { type: layer.type, selectedIndex: layer.selectedCard ? layer.selectedCard.order : null }
+            })
+
+
+            setPreviousStateLayers(currentLayerStructure)
+        }
+
+    }, [dataForRendered])
+
+
+    console.log(state, "gbgrgw =======>")
+
+
+
+    function loadTemplate(template_id, application_id, showDataLoading) {
+        var requestInfo = {
+            endPoint: GenerateURL({ application_id: application_id, template_id: template_id }, properties.api.edit_template),
+            httpMethod: "GET",
+            httpHeaders: { "Content-Type": "application/json" }
+        }
+
+        showDataLoading != false && setState(new_state => ({
+            ...new_state,
+            data_loading: true,
+            error_msg: null
+        }));
+
+        InvokeApi(requestInfo, handleResponseTemplate, handleErrorTemplate);
+
+    }
+
+    function handleResponseTemplate(response) {
+        setState(new_state => ({
+            ...new_state,
+            job_template_data: response,
+            data_loading: false,
+            error_msg: null,
+            data: {
+                ...new_state,
+                name: response.name,
+                // queue_name : response?.job_template?.queue_name
+            }
+        }));
+
+        if (previousStateLayers)
+            setStateForCanvas(response.job_template, previousStateLayers)
+        else
+            transformData(response.job_template)
+    }
+
+    function handleErrorTemplate(error) {
+        setState(new_state => ({
+            ...new_state,
+            error_msg: "Error fetching data of this template " + " " + error,
+            data_loading: false
+        }));
+    }
+
+
+    const transformData = (jobTemplate) => {
+
+        let firstTimeData = []
+
+        let firstJob
+
+        let jobObject = {}
+
+        jobTemplate.jobs.forEach((item, index) => {
+
+            jobObject[item.job_code] = item.steps
+        })
+
+        let selectedJOb
+
+        let jobs = jobTemplate.jobs.map((item, index) => {
+
+
+            if (index == 0) {
+
+                firstJob = item.job_code
+                selectedJOb = { ...item, order: index }
+
+                return { ...item, job_name: item.job_name, order: index, selected: true }
+            }
+            return { ...item, job_name: item.job_name, order: index, selected: false }
+        })
+
+        firstTimeData.push({ type: 'jobs', values: [...jobs], selectedCard: selectedJOb })
+
+        let steps = jobObject[firstJob]
+
+        let stepsData
+
+        if (steps && steps.length > 0) {
+
+            stepsData = steps.map((item, index) => {
+
+                return { ...item, step_name: item.step_name, order: index, selected: false }
+            })
+        }
+
+        if (stepsData) {
+
+            firstTimeData.push({ type: 'steps', values: [...stepsData] })
+
+        }
+        else if (firstTimeData[0].values != 0) {
+            firstTimeData.push({ type: 'steps', values: [] })
+        }
+
+        setDataForRendered([...firstTimeData])
+    }
+
+    const onClickedHandle = (selectedCardData, index, type) => {
+        console.log(selectedCardData,index,type,"fdsvkdbhdfvfdbvhfd")
+
+        let currentData = dataForRendered.slice(0, index + 1)
+
+        let secondTimeClicked = selectedCardData && selectedCardData.selected
+
+        if (secondTimeClicked) {
+
+            let currentRendered = [...dataForRendered]
+            const lastElement = currentRendered.length
+            currentRendered.splice(index + 1, lastElement)
+            currentRendered[index].selectedCard = null
+            if (currentRendered[index].values && currentRendered[index].values[selectedCardData.order])
+                currentRendered[index].values[selectedCardData.order].selected = false
+
+            setDataForRendered(currentRendered)
+        }
+
+        else {
+            if (type === 'jobs') {
+                let job_type = selectedCardData.job_type
+                let prevJobsData = currentData[index]
+
+                // updating selected sign
+
+                let updatedNewSelectedJobs = prevJobsData && prevJobsData.values && prevJobsData.values.map(job => {
+
+                    if (selectedCardData.job_name === job.job_name && selectedCardData.order === job.order) {
+
+                        return { ...job, selected: true }
+                    }
+
+                    else {
+                        return { ...job, selected: false }
+                    }
+
+                })
+
+                currentData[index].selectedCard = selectedCardData
+                currentData[index].values = updatedNewSelectedJobs         // changing only clicked index layer
+
+                let steps = selectedCardData && selectedCardData.steps && selectedCardData.steps.map((step, index) => {
+
+                    return { ...step, step_name: step.step_name, order: index, selected: false }
+                })
+
+                currentData.push({ type: 'steps', values: steps })
+
+                setJobVersion(job_type)
+
+            }
+
+            else if (type === 'steps') {
+
+                let prevStepData = currentData[index]
+
+                let updatedNewSelectedStep = prevStepData && prevStepData.values && prevStepData.values.map(step => {
+
+                    if (selectedCardData.step_name === step.step_name && selectedCardData.order === step.order) {
+
+                        return { ...step, selected: true }
+                    }
+
+                    else {
+                        return { ...step, selected: false }
+                    }
+
+                })
+                currentData[index].selectedCard = selectedCardData
+                currentData[index].values = updatedNewSelectedStep         // changing only clicked index layer
+
+                let conditions = selectedCardData && selectedCardData.values_step_mapping.map((item, index) => {
+
+                    return { ...item, value: item.value, order: index }
+                })
+
+                currentData.push({ type: 'conditions', values: conditions, selected: false })
+
+            }
+
+            else if (type === 'conditions') {
+
+                let prevConditionData = currentData[index]
+
+                let updatedNewConditionStep = prevConditionData && prevConditionData.values && prevConditionData.values.map(condition => {
+
+                    if (selectedCardData.value === condition.value && selectedCardData.order === condition.order) {
+
+                        return { ...condition, selected: true }
+                    }
+
+                    else {
+                        return { ...condition, selected: false }
+                    }
+
+                })
+
+                currentData[index].selectedCard = selectedCardData
+                currentData[index].values = updatedNewConditionStep         // changing only clicked index layer
+
+                let steps = selectedCardData && selectedCardData.steps.map((item, index) => {
+
+                    return { ...item, step_name: item.step_name, order: index, selected: false }
+                })
+
+                currentData.push({ type: 'steps', values: [...steps] })
+
+            }
+            setDataForRendered(currentData)
+
+
+        }
+    }
+
+    const setStateForCanvas = (jobTemplate, previousStateLayers) => {        // this function prepare data to render previous canvas after operations
+
+        let dataForCanvas = []
+
+        previousStateLayers && previousStateLayers.forEach((layer, index) => {
+
+            if (index === 0 && layer.type == 'jobs') {
+
+                let selectedJob
+                let jobs = jobTemplate.jobs.map((job, index) => {
+
+                    if (layer.selectedIndex == index) {
+
+                        selectedJob = { ...job, order: index }
+
+                        return { ...job, job_name: job.job_name, order: index, selected: true }
+                    }
+                    return { ...job, job_name: job.job_name, order: index, selected: false }
+                })
+
+                dataForCanvas.push({ type: 'jobs', values: [...jobs], selectedCard: selectedJob })
+
+            }
+
+            else if (index == 1 && layer.type == 'steps') {
+
+                let selectedStep
+
+                let stepsOfPreviousJobs = dataForCanvas[index - 1].selectedCard.steps.map((step, index) => {
+
+                    if (index == layer.selectedIndex && step.is_conditional_step === true) {
+
+                        selectedStep = { ...step, order: index }
+                        return { ...step, step_name: step.step_name, order: index, selected: true }
+
+                    }
+
+                    else {
+
+                        return { ...step, step_name: step.step_name, order: index, selected: false }
+                    }
+
+                })
+
+                stepsOfPreviousJobs && dataForCanvas.push({ type: 'steps', values: [...stepsOfPreviousJobs], selectedCard: selectedStep })
+
+            }
+
+            else if (index == 2 && layer.type == 'conditions') {
+
+                if (dataForCanvas[index - 1] && dataForCanvas[index - 1].selectedCard) {
+                    let value_step_mapping = dataForCanvas[index - 1].selectedCard && dataForCanvas[index - 1].selectedCard.values_step_mapping
+
+                    let selectedCondition
+
+                    let conditions = value_step_mapping && value_step_mapping.map((condition, index) => {
+
+                        if (layer.selectedIndex == index) {
+                            selectedCondition = { ...condition, order: index }
+                            return { ...condition, value: condition.value, order: index, selected: true }
+                        }
+                        else {
+                            return { ...condition, value: condition.value, order: index, selected: false }
+
+                        }
+                    })
+
+                    conditions && dataForCanvas.push({ type: 'conditions', values: [...conditions], selectedCard: selectedCondition })
+                }
+
+            }
+
+            else if (index == 3 && layer.type == 'steps') {
+
+                if (dataForCanvas[index - 1] && dataForCanvas[index - 1].selectedCard) {
+
+                    let selectedStep
+                    let steps = dataForCanvas[index - 1].selectedCard.steps
+                    let stepsOfPreviousConditions = steps && steps.map((step, index) => {
+
+                        return { ...step, step_name: step.step_name, order: index, selected: false }
+
+                    })
+                    steps && stepsOfPreviousConditions && dataForCanvas.push({ type: 'steps', values: [...stepsOfPreviousConditions], selectedCard: selectedStep })
+
+
+                }
+
+            }
+        })
+
+        setDataForRendered(dataForCanvas)
+        setState(prevState => ({ ...prevState }))
+
+    }
+
+    const updateSelectedTab = (selectedTabOrder) => {
+        setState({ ...state, selectedTab: selectedTabOrder, });
+    }
+    const yaml = ConvertJobTemplateObjtoYAML(state.job_template_data)
+
+    const updateJobTemplate = (jobTemplate, showLoading) => {
+console.log(jobTemplate,"jobTemplatejobTemplate")
+        let update_job_template_url = GenerateURL({ application_id: application_id, template_id: template_id }, properties.api.edit_template)
+        showSnackbar('info', "Updating Job template...", '');
+
+        if (showLoading == false) {
+
+
+            PostData(update_job_template_url, jobTemplate, (res) => {updateScuccesWithoutLoading(res)}, updateFail, false, true);
+        }
+        else {
+            PostData(update_job_template_url, jobTemplate, updateSuccess, updateFail, false, true)
+
+        }
+
+    }
+
+    const updateScuccesWithoutLoading = (res) => {
+        showSnackbar('success', "Job template updated successfully.", '');
+        setState(new_state => ({
+            ...new_state,
+            error_msg: null
+        }))
+       
+        loadTemplate(template_id, application_id, false);
+
+    }
+
+    function updateSuccess(response) {
+        showSnackbar('success', "Job template updated successfully.", '');
+        setState(new_state => ({
+            ...new_state,
+            error_msg: null
+        }))
+
+        loadTemplate(template_id, application_id);
+
+    }
+
+    function updateFail(response) {
+        let error_msg = showErrorHandlerUpdated(response)
+        showSnackbar('error', "Failed to update job template.", error_msg);
+        setState(new_state => ({
+            ...new_state,
+            error_msg: response.toString()
+        }))
+    }
+
+    const editIconClicked = () => {
+        if (state.job_template_data && state.job_template_data.name) {
+            let templateName = state.job_template_data.name
+            setState(prevState => ({
+                ...prevState,
+                error: {},
+                data: {
+                    ...prevState.data,
+                    name: templateName
+                }
+            }))
+            setTemplateNameEdit(true)
+        }
+
+    }
+
+    const handleSubmitData = () => {
+
+        let result = ValidateDataSet(state.data, state.validations)
+
+        if (result.valid) {
+
+            let jobTemplate = state.job_template_data
+
+            jobTemplate['name'] = state.data.name
+
+            if (state.data.queue_name) {
+                if (state.data.queue_name == "") {
+                    jobTemplate.job_template['queue_name'] = null
+                } else {
+                    jobTemplate.job_template.queue_name = state.data.queue_name
+                }
+            } else {
+                jobTemplate.job_template.queue_name = null
+            }
+
+            updateJobTemplate(jobTemplate, false)
+
+            setTemplateNameEdit(false)
+        }
+
+        else {
+
+            setState(prevState => ({
+                ...prevState,
+                error: result.error
+            }))
+        }
+    }
+
+    function onQueueNameChange(e) {
+        const value = e.target.value
+        const fieldName = e.target.name
+
+        var selectedQueueName;
+
+        state.list.forEach((item) => {
+            if (Number(item.id) == Number(value)) {
+                selectedQueueName = item.label;
+            }
+        })
+
+        setState((new_state) => ({
+            ...new_state,
+            data: {
+                ...new_state.data,
+                queue_name: selectedQueueName
+            }
+        }))
+    }
+
+    console.log(dataForRendered,"sdkjbchjsbdchjsbdhjcs")
+
+    return (
+        <>
+            {state.canRedirect ? <Navigate to={`/application/${application_id}/job-templates`} /> : null}
+            {
+                state.data_loading ? <Loading />
+                    :
+                    state.error_msg ?
+                        <ErrorComponent variant="error-box" error={state.error_msg} />
+                        :
+                        <div className={classes.root}>
+                            <Grid container alignItems="center" justifyContent="space-between" lg={12}>
+                                {
+                                    !templateNameEdit ?
+                                        <div>
+                                            <div style={{ display: "flex" }}>
+                                                <p style={{ fontSize: '24px', fontWeight: '300', lineHeight: '1' }}> {state.job_template_data && state.job_template_data.name ? state.job_template_data.name : 'Job Template Name'} <span className="ri-edit-line  cursor-pointer" style={{ fontSize: 20, color: '#4794eb' }} onClick={editIconClicked}  role="button" tabIndex={0} onKeyDown={() => { }}></span></p>
+                                            </div>
+                                            <p className="sub-heading">to understand more about job template please read the <a href="https://www.opstree.com/buildpiper/documentation/" target="_blank" className="text-anchor-blue">Documentation</a></p>
+                                        </div>
+                                        :
+                                        <div className='align-center justify-center' style={{ display: 'flex' }}>
+                                            <div style={{ marginRight: '30px' }} className='remove-margin-from-input'>
+                                                <Input
+                                                    type="text"
+                                                    name="name"
+                                                    mandatorySign
+                                                    placeholder="Enter Name"
+                                                    onChangeHandler={commonFunctions.onChangeHandler}
+                                                    data={state.data}
+                                                    error={state.error}
+                                                />
+
+                                            </div>
+                                            <button onClick={handleSubmitData} className="btn btn-submit mr-12">Save</button>
+                                            <button onClick={() => setTemplateNameEdit(false)} className="btn btn-outline-grey">Cancel</button>
+                                        </div>
+
+                                }
+
+                                <div>
+                                    <CommonHorizontalTab
+                                        tabList={[{ tabName: "Canvas", order: 1 }, { tabName: "YAML", order: 2 }]}
+                                        selectedTabOrder={state.selectedTab}
+                                        variant="capsule"
+                                        updateSelectedTab={updateSelectedTab}
+                                    />
+                                </div>
+                            </Grid>
+                            <div className='' >
+                                <div className="card">
+                                    {
+                                        state.selectedTab === 1 ?
+                                            <JobTemplateCard 
+                                            previousCanvasLayer={previousStateLayers} 
+                                            updatePreviousCanvasLayer={setPreviousStateLayers} 
+                                            data={dataForRendered} 
+                                            updateJobTemplate={updateJobTemplate} 
+                                            jobTemplate={state.job_template_data} 
+                                            onClickedFunction={onClickedHandle} 
+                                            application_id={application_id} 
+                                            template_id={template_id} 
+                                            queueList={state.list} /> :
+                                            <div className='card-c-body' style={{ height: '745px', overflow: 'auto' }}>
+                                                <SyntaxHighlighter language="yaml" style={atomOneDark} >
+                                                    {yaml}
+                                                </SyntaxHighlighter>
+                                            </div>
+                                    }
+
+                                    <div style={{ justifyContent: 'flex-end' }} className="card-footer">
+                                        <Link to={'/application/' + application_id + '/job-templates'}><button className="btn btn-outline-grey">Back</button></Link>
+                                    </div>
+                                </div>
+                               
+                            </div>
+                        </div>
+            }
+
+            {/* <StepDetail/> */}
+        </>
+    )
+}
+
+export default EditJobTemplates;
+
+
+const useStyles = makeStyles({
+    root: {
+        margin: '20px',
+        '& .card': {
+            borderRadius: 4,
+            marginTop: '20px'
+        }
+    },
+
+
+    connectedLines: {
+
+        borderTop: '1px solid'
+    }
+});
+
+
+
+
+
+
