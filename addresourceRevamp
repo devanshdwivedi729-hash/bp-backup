@@ -1,0 +1,686 @@
+import React, { useState, useEffect, useCallback } from "react";
+import PropTypes from "prop-types";
+import { Input } from "../../../../components/genericComponents/Input";
+import {
+  getCommonFunctions,
+  ResetComponent,
+} from "../../../serviceRevamp/add/ci_flow/SourceDetails";
+import { Loading } from "../../../utils/Loading";
+import { makeStyles } from "@mui/styles";
+import { ValidateDataSet } from "../../../../util/Validator";
+import SearchBar from "../../../../components/SearchBar";
+import GenerateURL from "../../../../util/APIUrlProvider";
+import properties from "../../../../properties/properties";
+import InvokeApi from "../../../../util/apiInvoker";
+import GenericSkeleton from "../../../../components/genericComponents/Skeletons/GenericSkeleton";
+import AddResourcesWithRegexRevamp, {
+  getResourcesDefaultState,
+} from "../../permissions/add/AddResourcesWithRegex";
+
+const useStyles = makeStyles(() => ({
+  permissionGroupsBox: {
+    backgroundColor: "#ffffff",
+    padding: "16px",
+    borderRadius: "8px",
+    marginBottom: "24px",
+    border: "1px solid #CACACA",
+  },
+  permissionGroupsTitle: {
+    fontSize: "14px",
+    fontWeight: "700",
+    color: "#505050",
+    fontStyle: "bold",
+    marginBottom: "26px",
+  },
+  resourceSelectWrapper: {
+    marginBottom: "16px",
+  },
+  infoText: {
+    fontSize: "12px",
+    color: "#407BCA",
+    fontWeight: "500",
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+  },
+  transferListContainer: {
+    display: "grid",
+    gridTemplateColumns: "1fr auto 1fr",
+    gap: "16px",
+    marginBottom: "16px",
+  },
+  listHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    marginBottom: "8px",
+  },
+  listLabel: {
+    fontSize: "12px",
+    fontWeight: "600",
+    color: "#505050",
+  },
+  listBox: {
+    border: "1px solid #ddd",
+    borderRadius: "4px",
+    backgroundColor: "#fff",
+  },
+  searchWrapper: {
+    padding: "12px 16px",
+  },
+  listContent: {
+    maxHeight: "280px",
+    overflowY: "auto",
+    padding: "8px",
+  },
+  checkboxLabel: {
+    display: "flex",
+    alignItems: "center",
+    padding: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "500",
+    color: "#505050",
+    "&:hover": {
+      backgroundColor: "#f5f5f5",
+    },
+  },
+  checkbox: {
+    marginRight: "8px",
+    width: "16px",
+    height: "16px",
+    cursor: "pointer",
+    accentColor: "#1976d2",
+  },
+  arrowButtons: {
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    gap: "8px",
+    paddingTop: "32px",
+  },
+  arrowButton: {
+    width: "44px",
+    height: "40px",
+    border: "1px solid #9DC0EE",
+    borderRadius: "6px",
+    backgroundColor: "#fff",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "18px",
+    color: "#124D9B",
+    transition: "all 0.3s ease",
+    "&:hover:not(:disabled)": {
+      backgroundColor: "#e3f2fd",
+    },
+    "&:disabled": {
+      cursor: "not-allowed",
+      opacity: 0.5,
+      backgroundColor: "#f5f5f5",
+      borderColor: "#ddd",
+      color: "#999",
+    },
+  },
+  accessFilterBox: {
+    border: "1px solid #CACACA",
+    borderRadius: "4px",
+    padding: "16px",
+    marginBottom: "24px",
+  },
+  accessFilterHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: "16px",
+  },
+  accessFilterLabel: {
+    fontSize: "14px",
+    fontWeight: "600",
+    color: "#2F2F2F",
+  },
+  emptyMessage: {
+    padding: "16px",
+    fontSize: "14px",
+    color: "#999",
+    textAlign: "center",
+  },
+  actionButtons: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "12px",
+    marginTop: "24px",
+    paddingTop: "16px",
+    borderTop: "1px solid #E7E7E7",
+  },
+}));
+
+function not(a, b) {
+  return a.filter((value) => b.indexOf(value) === -1);
+}
+
+function intersection(a, b) {
+  return a.filter((value) => b.indexOf(value) !== -1);
+}
+
+function union(a, b) {
+  return [...a, ...not(b, a)];
+}
+
+const removeAlreadyConfiguredResources = (all_resources, configured_resources) =>
+  all_resources.filter(
+    (resource) =>
+      !configured_resources.some(
+        (configured) =>
+          String(configured.entity_id) === String(resource.id ?? resource.entity_id),
+      ),
+  );
+
+const AddResourcesRevamp = (props) => {
+  const inherits = props.inherits ?? {};
+  const prev_state = props.prev_state ?? null;
+  const total_configured_resources = props.total_configured_resources ?? [];
+  const [permissionGroupsLoading, setPermissionGroupsLoading] = useState(false);
+
+  const [state, setState] = useState(() =>
+    prev_state
+      ? {
+        ...prev_state,
+        data: {
+          ...prev_state.data,
+          entity_id: prev_state.data?.entity_id ?? "",
+          grant_to_all: prev_state.data?.grant_to_all ?? true,
+        },
+      }
+      : getAddResourcesDefaultState(),
+  );
+
+  const [resourceDefinitions, setResourceDefinitions] = useState(
+    prev_state?.resource_regex_child?.resource_definitions ?? [],
+  );
+
+  const commonFunctions = getCommonFunctions(state, setState, inherits);
+  const classes = useStyles();
+
+  const entities_list = props.entities_list
+    ? removeAlreadyConfiguredResources(props.entities_list, total_configured_resources)
+    : [];
+
+  const [checked, setChecked] = useState([]);
+  const [left, setLeft] = useState([]);
+  const [right, setRight] = useState([]);
+  const [totalArr, setTotalArr] = useState([]);
+
+  const [availableSearchText, setAvailableSearchText] = useState("");
+  const [availableSearchData, setAvailableSearchData] = useState({ name: "" });
+  const [selectedSearchText, setSelectedSearchText] = useState("");
+  const [selectedSearchData, setSelectedSearchData] = useState({ name: "" });
+
+  const leftChecked = intersection(checked, left);
+  const rightChecked = intersection(checked, right);
+
+  const getFinalResourceList = props.getFinalResourceList ?? (() => { });
+  const getAllPermissionsGroup = props.getAllPermissionsGroup ?? (() => { });
+
+  useEffect(() => {
+    registerGetData(() => {
+      if (!state.data.entity_id) return null;
+      return buildResourceEntry();
+    });
+  }, [state.data.entity_id, right, resourceDefinitions]); 
+
+  useEffect(() => {
+    if (prev_state?.data?.entity_id) {
+      fetchPermissionGroupsForEntity(prev_state.data.entity_id, (groups) => {
+        if (prev_state?.permission_group_json?.length > 0) {
+          const attachedIds = prev_state.permission_group_json.map((g) =>
+            String(g.id ?? g),
+          );
+          const allIds = groups.map((g) => String(g.id));
+          setLeft(allIds.filter((id) => !attachedIds.includes(id)));
+          setRight(attachedIds);
+        } else {
+          setLeft(groups.map((g) => String(g.id)));
+          setRight([]);
+        }
+      });
+    }
+  }, [prev_state?.data?.entity_id]);
+
+  useEffect(() => {
+    if (!state.data.entity_id) return;
+
+    const updatedList = [
+      ...state.resources_list.filter(
+        (item) => String(item.entity_id) !== String(state.data.entity_id),
+      ),
+      {
+        entity_id: state.data.entity_id,
+        permission_groups: right,
+        permission_group_json: getPermissionsGroupFromId(),
+        resource_definitions:
+          resourceDefinitions.length > 0
+            ? [{ criteria_regex: setCriteriaRegexToArr(resourceDefinitions) }]
+            : [],
+      },
+    ];
+
+    getFinalResourceList(updatedList);
+  }, [right, state.data.entity_id, resourceDefinitions]); 
+
+  const handleToggle = useCallback(
+    (value) => () => {
+      setChecked((prev) => {
+        const idx = prev.indexOf(value);
+        return idx === -1 ? [...prev, value] : prev.filter((_, i) => i !== idx);
+      });
+    },
+    [],
+  );
+
+  const fetchPermissionGroupsForEntity = useCallback(
+    (entityId, onSuccess) => {
+      setPermissionGroupsLoading(true);
+      InvokeApi(
+        {
+          endPoint: GenerateURL(
+            { entity_id: entityId },
+            properties.api.permission_group_of_specific_entity_id,
+          ),
+          httpMethod: "GET",
+          httpHeaders: { "Content-Type": "application/json" },
+        },
+        (data) => {
+          const groups = data?.results || data || [];
+          setTotalArr(groups);
+          getAllPermissionsGroup(groups);
+          setPermissionGroupsLoading(false);
+          if (onSuccess) onSuccess(groups);
+        },
+        () => {
+          setPermissionGroupsLoading(false);
+        },
+      );
+    },
+    [getAllPermissionsGroup],
+  );
+
+  const numberOfChecked = (items) => intersection(checked, items).length;
+
+  const handleToggleAll = (items) => () => {
+    setChecked((prev) =>
+      numberOfChecked(items) === items.length ? not(prev, items) : union(prev, items),
+    );
+  };
+
+  const handleCheckedRight = () => {
+    setRight((r) => [...r, ...leftChecked]);
+    setLeft((l) => not(l, leftChecked));
+    setChecked((c) => not(c, leftChecked));
+  };
+
+  const handleCheckedLeft = () => {
+    setLeft((l) => [...l, ...rightChecked]);
+    setRight((r) => not(r, rightChecked));
+    setChecked((c) => not(c, rightChecked));
+  };
+
+  const handleAvailableSearch = useCallback((searchValue) => {
+    setAvailableSearchText(searchValue.name ?? "");
+    setAvailableSearchData(searchValue);
+  }, []);
+
+  const resetAvailableSearch = useCallback(() => {
+    setAvailableSearchText("");
+    setAvailableSearchData({ name: "" });
+  }, []);
+
+  const handleSelectedSearch = useCallback((searchValue) => {
+    setSelectedSearchText(searchValue.name ?? "");
+    setSelectedSearchData(searchValue);
+  }, []);
+
+  const resetSelectedSearch = useCallback(() => {
+    setSelectedSearchText("");
+    setSelectedSearchData({ name: "" });
+  }, []);
+
+  const onChangeHitEntitiesApi = (e) => {
+    const value = e.target.value;
+    commonFunctions.onChangeHandler(e);
+    setLeft([]);
+    setRight([]);
+    setTotalArr([]);
+    setChecked([]);
+    setResourceDefinitions([]);
+    resetAvailableSearch();
+    resetSelectedSearch();
+    if (value) {
+      fetchPermissionGroupsForEntity(value, (groups) => {
+        setLeft(groups.map((g) => String(g.id)));
+      });
+    }
+  };
+
+  function DisplayEntityName(id) {
+    const match = totalArr.find((item) => String(item.id) === String(id));
+    return match ? match.name : "N/A";
+  }
+
+  function setCriteriaRegexToArr(array) {
+    return array.reduce((acc, item) => ({ ...acc, [item.name]: item.regex }), {});
+  }
+
+  function getPermissionsGroupFromId() {
+    return right.flatMap((id) => totalArr.filter((g) => String(g.id) === String(id)));
+  }
+
+
+  const buildResourceEntry = useCallback(() => ({
+    entity_id: state.data.entity_id,
+    permission_groups: right,
+    permission_group_json: getPermissionsGroupFromId(),
+    resource_definitions:
+      resourceDefinitions.length > 0
+        ? [{ criteria_regex: setCriteriaRegexToArr(resourceDefinitions) }]
+        : [],
+  }), [state.data.entity_id, right, resourceDefinitions, totalArr]);
+
+  const SaveAndCreateDataToPost = () => {
+    const result = ValidateDataSet(state.data, state.validations);
+
+    if (result.valid) {
+      const resource_list = state.resources_list ?? [];
+      const hasDuplicate = resource_list.some(
+        (item) => String(item.entity_id) === String(state.data.entity_id),
+      );
+      const updated = hasDuplicate
+        ? resource_list
+        : [...resource_list, buildResourceEntry()];
+
+      getFinalResourceList(updated);
+      resetState();
+    } else {
+      setState((s) => ({ ...s, error: result.error }));
+    }
+  };
+
+  const updateCurrentObj = () => {
+    const result = ValidateDataSet(state.data, state.validations);
+
+    if (result.valid) {
+      const updatedList = state.resources_list.map((item) =>
+        String(item.entity_id) === String(prev_state.data.entity_id)
+          ? { ...item, ...buildResourceEntry() }
+          : item,
+      );
+
+      getFinalResourceList(updatedList, "edited_data");
+      resetState();
+    } else {
+      setState((s) => ({ ...s, error: result.error }));
+    }
+  };
+
+  const resetState = () => {
+    setResourceDefinitions([]); 
+    setState((s) => ({
+      ...s,
+      data: { entity_id: "", grant_to_all: true },
+      error: {},
+    }));
+    setLeft([]);
+    setRight([]);
+    setChecked([]);
+    resetAvailableSearch();
+    resetSelectedSearch();
+  };
+
+  const filteredAvailableGroups = left.filter((id) =>
+    DisplayEntityName(id).toLowerCase().includes(availableSearchText.toLowerCase()),
+  );
+
+  const filteredSelectedGroups = right.filter((id) =>
+    DisplayEntityName(id).toLowerCase().includes(selectedSearchText.toLowerCase()),
+  );
+
+  const availableEmptyMessage = !state.data.entity_id
+    ? "No available permission groups"
+    : availableSearchText
+      ? "No permission groups found"
+      : right.length > 0
+        ? "All permission groups selected"
+        : "No permission groups found";
+
+  const selectedEmptyMessage = !state.data.entity_id
+    ? "No selected permission groups"
+    : selectedSearchText
+      ? "No permission groups found"
+      : "No permission groups selected";
+
+  const dropdownList = entities_list.map((e) => ({
+    id: e.id ?? e.entity_id,
+    label: e.name ?? e.entity_name,
+  }));
+  const registerGetData = props.registerGetData ?? (() => { });
+  return (
+    <>
+      <div className={classes.permissionGroupsBox}>
+        <h3 className={classes.permissionGroupsTitle}>Assign Permission Groups</h3>
+
+        <div className={classes.resourceSelectWrapper}>
+          {props.entitiesLoading ? (
+            <Loading varient="light" />
+          ) : (
+            <Input
+              type="select"
+              label="Select Resource"
+              name="entity_id"
+              mandatorySign
+              list={dropdownList}
+              data={state.data}
+              error={state.error}
+              onChangeHandler={onChangeHitEntitiesApi}
+            />
+          )}
+          <p className={classes.infoText}>
+            <span className="ri-information-line font-13"></span>
+            Select a resource type, necessary permission groups and apply filters if required
+          </p>
+        </div>
+
+        <div className={classes.transferListContainer}>
+          <div>
+            <div className={classes.listHeader}>
+              <label className={classes.listLabel}>Available Permission Groups</label>
+              <span className="ri-information-line font-13"></span>
+            </div>
+            <div className={classes.listBox}>
+              <div className={classes.searchWrapper}>
+                <SearchBar
+                  newDesign={{ apply: true, width: "100%" }}
+                  search_data={availableSearchData}
+                  default_filter={{ name: "name", label: "Search" }}
+                  search_call_back={handleAvailableSearch}
+                  clear_search_callback={resetAvailableSearch}
+                />
+              </div>
+              <div className={classes.listContent}>
+                {permissionGroupsLoading ? (
+                  <GenericSkeleton
+                    variant="rect"
+                    width="100%"
+                    height={50}
+                    style={{ borderRadius: "8px" }}
+                  />
+                ) : filteredAvailableGroups.length > 0 ? (
+                  <>
+                    <label className={classes.checkboxLabel}>
+                      <input
+                        type="checkbox"
+                        checked={
+                          numberOfChecked(filteredAvailableGroups) ===
+                          filteredAvailableGroups.length &&
+                          filteredAvailableGroups.length > 0
+                        }
+                        onChange={handleToggleAll(filteredAvailableGroups)}
+                        className={classes.checkbox}
+                      />
+                      Select All
+                    </label>
+                    {filteredAvailableGroups.map((id) => (
+                      <label key={id} className={classes.checkboxLabel}>
+                        <input
+                          type="checkbox"
+                          checked={checked.indexOf(id) !== -1}
+                          onChange={handleToggle(id)}
+                          className={classes.checkbox}
+                        />
+                        {DisplayEntityName(id)}
+                      </label>
+                    ))}
+                  </>
+                ) : (
+                  <div className={classes.emptyMessage}>{availableEmptyMessage}</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className={classes.arrowButtons}>
+            <button
+              className={classes.arrowButton}
+              onClick={handleCheckedRight}
+              disabled={leftChecked.length === 0}
+            >
+              <span className="ri-arrow-right-s-line font-18"></span>
+            </button>
+            <button
+              className={classes.arrowButton}
+              onClick={handleCheckedLeft}
+              disabled={rightChecked.length === 0}
+            >
+              <span className="ri-arrow-left-s-line font-18"></span>
+            </button>
+          </div>
+
+          <div>
+            <div className={classes.listHeader}>
+              <label className={classes.listLabel}>Selected Permission Groups</label>
+              <span className="ri-information-line font-13"></span>
+            </div>
+            <div className={classes.listBox}>
+              <div className={classes.searchWrapper}>
+                <SearchBar
+                  newDesign={{ apply: true, width: "100%" }}
+                  search_data={selectedSearchData}
+                  default_filter={{ name: "name", label: "Search" }}
+                  search_call_back={handleSelectedSearch}
+                  clear_search_callback={resetSelectedSearch}
+                />
+              </div>
+              <div className={classes.listContent}>
+                {filteredSelectedGroups.length > 0 ? (
+                  <>
+                    <label className={classes.checkboxLabel}>
+                      <input
+                        type="checkbox"
+                        checked={
+                          numberOfChecked(filteredSelectedGroups) ===
+                          filteredSelectedGroups.length &&
+                          filteredSelectedGroups.length > 0
+                        }
+                        onChange={handleToggleAll(filteredSelectedGroups)}
+                        className={classes.checkbox}
+                      />
+                      Select All
+                    </label>
+                    {filteredSelectedGroups.map((id) => (
+                      <label key={id} className={classes.checkboxLabel}>
+                        <input
+                          type="checkbox"
+                          checked={checked.indexOf(id) !== -1}
+                          onChange={handleToggle(id)}
+                          className={classes.checkbox}
+                        />
+                        {DisplayEntityName(id)}
+                      </label>
+                    ))}
+                  </>
+                ) : (
+                  <div className={classes.emptyMessage}>{selectedEmptyMessage}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p className={classes.infoText}>
+          <span className="ri-information-line font-13 color-blue"></span>
+          Click on the right arrow to move available permission groups to selected permission groups
+        </p>
+      </div>
+
+      <div className={classes.accessFilterBox}>
+        <div className={classes.accessFilterHeader}>
+          <label className={classes.accessFilterLabel}>
+            Do you want to give access to all resources of the selected resource type?
+          </label>
+          <div className="switch-input-wrapper">
+            <Input
+              type="only-switch"
+              label=""
+              padding="0px"
+              name="grant_to_all"
+              data={state.data}
+              error={state.error}
+              onChangeHandler={commonFunctions.toggleState}
+            />
+          </div>
+        </div>
+
+        {!state.data.grant_to_all && (
+          <AddResourcesWithRegexRevamp
+            inherits={state.child_inherits.resource_regex_child}
+            prev_state={{
+              ...getResourcesDefaultState(),
+              resource_definitions: resourceDefinitions,
+            }}
+            entity_id={state.data.entity_id}
+            onResourceDefinitionsChange={setResourceDefinitions} 
+          />
+        )}
+        {state.data.grant_to_all && (
+          <ResetComponent inherits={state.child_inherits.resource_regex_child} />
+        )}
+      </div>
+    </>
+  );
+};
+
+AddResourcesRevamp.propTypes = {
+  ...PropTypes.objectOf(PropTypes.any),
+};
+
+export default AddResourcesRevamp;
+
+export const getAddResourcesDefaultState = () => ({
+  data: {
+    entity_id: "",
+    grant_to_all: true,
+  },
+  error: {},
+  validations: {
+    entity_id: ["req"],
+  },
+  render_edit_data: false,
+  resources_list: [],
+  child_inherits: {
+    resource_regex_child: {
+      validateForm: () => ({ valid: true }),
+      getState: () => ({}),
+      getData: () => ({}),
+    },
+  },
+});
